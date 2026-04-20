@@ -1,0 +1,174 @@
+/* toolbar.css — 工具列、模式按鈕、圖層切換 */
+
+/* Mode radio buttons */
+.mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  transition: background .12s, color .12s;
+  border: 1px solid transparent;
+}
+.mode-btn:hover { background: var(--primary-lt); color: var(--primary); }
+.mode-btn.active {
+  background: var(--primary-lt);
+  color: var(--primary);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+.mode-btn .mode-icon { font-size: 16px; line-height: 1; }
+
+/* Layer toggles */
+.layer-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+  transition: background .12s;
+}
+.layer-toggle:hover { background: var(--panel-alt); }
+
+.layer-toggle input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* Zoom controls */
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zoom-controls input[type="range"] {
+  flex: 1;
+  accent-color: var(--primary);
+}
+
+.btn-zoom {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .12s;
+}
+.btn-zoom:hover { background: var(--primary-lt); color: var(--primary); }
+
+.zoom-label {
+  font-size: 11px;
+  color: var(--sub);
+  min-width: 36px;
+  text-align: center;
+}
+
+/* Furniture catalog cards */
+.catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.catalog-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  transition: border-color .12s, box-shadow .12s;
+}
+.catalog-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+.catalog-card.active-place {
+  border-color: var(--accent);
+  background: #fff7f2;
+}
+
+.catalog-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,.1);
+}
+
+.catalog-info { flex: 1; min-width: 0; }
+.catalog-name { font-size: 12px; font-weight: 600; }
+.catalog-size { font-size: 11px; color: var(--sub); }
+
+.btn-add-custom {
+  width: 100%;
+  padding: 7px 8px;
+  margin-top: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px dashed var(--primary);
+  transition: background .12s;
+}
+.btn-add-custom:hover { background: var(--primary-lt); }
+
+/* Zone type chips */
+.zone-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zone-type-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 12px;
+  transition: border-color .12s;
+}
+.zone-type-chip:hover { border-color: var(--primary); }
+.zone-type-chip.active-draw { border-color: var(--accent); background: #fff7f2; }
+
+.zone-color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

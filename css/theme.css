@@ -1,0 +1,100 @@
+/* theme.css — CSS 自訂屬性（設計 token） */
+:root {
+  --bg:          #f0f4f8;
+  --panel:       #ffffff;
+  --panel-alt:   #f7f9fc;
+  --ink:         #0d1b2a;
+  --sub:         #4e6a82;
+  --line:        #d0dce8;
+  --primary:     #005f8f;
+  --primary-lt:  #d9eef8;
+  --primary-dk:  #004468;
+  --accent:      #e07b39;
+  --ok:          #0f7a46;
+  --danger:      #b31936;
+  --shadow-sm:   0 2px 8px rgba(7,23,35,.07);
+  --shadow-md:   0 8px 24px rgba(7,23,35,.10);
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --font:        "Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;
+  --font-mono:   "Cascadia Code","Consolas",monospace;
+
+  --sidebar-w:   220px;
+  --props-w:     220px;
+  --header-h:    48px;
+  --status-h:    28px;
+
+  /* Zone colors */
+  --zone-meeting:   #4a90d9;
+  --zone-breakroom: #7bc67e;
+  --zone-storage:   #f5a623;
+  --zone-reception: #9b59b6;
+  --zone-server:    #e74c3c;
+  --zone-open:      #5dade2;
+  --zone-custom:    #95a5a6;
+
+  /* Furniture palette */
+  --fi-workstation: #a8d8ea;
+  --fi-desk:        #b8e0d2;
+  --fi-chair:       #d6eaf8;
+  --fi-meeting:     #d5d8dc;
+  --fi-storage:     #fad7a0;
+  --fi-custom:      #d7bde2;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+input, select, textarea {
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--ink);
+  transition: border-color .15s;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-lt);
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  color: var(--sub);
+  margin-bottom: 3px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b0bec5; }

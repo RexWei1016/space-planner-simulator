@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>辦公室空間規畫模擬器</title>
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/toolbar.css">
+  <link rel="stylesheet" href="css/panels.css">
+  <link rel="stylesheet" href="css/canvas.css">
+</head>
+<body class="mode-select">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!--  APP SHELL                                                  -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- ── Header ────────────────────────────────────────────── -->
+  <header id="app-header">
+    <h1>🏢 空間規畫模擬器</h1>
+    <span id="room-info">尚未設定空間</span>
+    <div class="header-actions">
+      <button class="btn-header" id="btn-new-plan">＋ 新規畫</button>
+      <button class="btn-header" id="btn-import-json">📂 匯入</button>
+      <button class="btn-header" id="btn-export-json">💾 匯出 JSON</button>
+      <button class="btn-header" id="btn-export-png">🖼 匯出 PNG</button>
+      <input type="file" id="import-file-input" accept=".json" style="display:none">
+    </div>
+  </header>
+
+  <!-- ── Left Sidebar ───────────────────────────────────────── -->
+  <aside id="sidebar">
+
+    <!-- Mode -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span>操作模式</span>
+        <i class="toggle-icon">▾</i>
+      </div>
+      <div class="sidebar-section-body">
+        <div class="mode-group">
+          <button class="mode-btn active" id="btn-mode-select">
+            <span class="mode-icon">↖</span> 選取 / 移動
+          </button>
+          <button class="mode-btn" id="btn-mode-zone">
+            <span class="mode-icon">⬜</span> 繪製區域
+          </button>
+          <button class="mode-btn" id="btn-mode-furniture">
+            <span class="mode-icon">🪑</span> 放置家具
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Layers -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span>圖層顯示</span>
+        <i class="toggle-icon">▾</i>
+      </div>
+      <div class="sidebar-section-body">
+        <div class="layer-toggle-list">
+          <label class="layer-toggle">
+            <input type="checkbox" id="toggle-layer1" checked>
+            <span>🏠 邊界 (Layer 1)</span>
+          </label>
+          <label class="layer-toggle">
+            <input type="checkbox" id="toggle-layer2" checked>
+            <span>⬜ 區域 (Layer 2)</span>
+          </label>
+          <label class="layer-toggle">
+            <input type="checkbox" id="toggle-layer3" checked>
+            <span>🪑 家具 (Layer 3)</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span>縮放</span>
+        <i class="toggle-icon">▾</i>
+      </div>
+      <div class="sidebar-section-body">
+        <div class="zoom-controls">
+          <button class="btn-zoom" id="btn-zoom-out">−</button>
+          <input type="range" id="zoom-slider" min="1" max="10" step="0.5" value="4">
+          <button class="btn-zoom" id="btn-zoom-in">＋</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
+          <span class="zoom-label" id="zoom-label">4×</span>
+          <button class="btn-zoom" id="btn-zoom-fit" style="width:auto;padding:0 8px;font-size:11px;">適合畫面</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid settings -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span>網格設定</span>
+        <i class="toggle-icon">▾</i>
+      </div>
+      <div class="sidebar-section-body">
+        <div class="prop-row">
+          <label>格子大小</label>
+          <select id="grid-cell-select"></select>
+        </div>
+        <label class="layer-toggle" style="margin-top:6px;">
+          <input type="checkbox" id="toggle-ping-grid">
+          <span>顯示坪數格</span>
+        </label>
+        <div style="font-size:11px;color:var(--sub);margin-top:4px;line-height:1.5;">
+          1 坪 ≈ 3.306 m²<br>
+          坪數格邊長 ≈ 182 cm
+        </div>
+      </div>
+    </div>
+
+    <!-- Zone types -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span>區域類型</span>
+        <i class="toggle-icon">▾</i>
+      </div>
+      <div class="sidebar-section-body">
+        <div class="zone-type-list" id="zone-type-list">
+          <!-- built dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Furniture catalog -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span>家具目錄</span>
+        <i class="toggle-icon">▾</i>
+      </div>
+      <div class="sidebar-section-body">
+        <div class="catalog-list" id="furniture-catalog-list">
+          <!-- built dynamically -->
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── Canvas Viewport ────────────────────────────────────── -->
+  <main id="canvas-viewport">
+    <div id="canvas-stage">
+      <canvas id="layer-grid"></canvas>
+      <svg    id="layer-room"      xmlns="http://www.w3.org/2000/svg" overflow="visible"></svg>
+      <svg    id="layer-zones"     xmlns="http://www.w3.org/2000/svg" overflow="visible"></svg>
+      <div    id="layer-furniture"></div>
+      <div    id="interaction-overlay"></div>
+    </div>
+  </main>
+
+  <!-- ── Properties Panel ──────────────────────────────────── -->
+  <aside id="props-panel">
+    <p class="props-placeholder">選取物件以查看屬性</p>
+  </aside>
+
+  <!-- ── Status Bar ─────────────────────────────────────────── -->
+  <footer id="status-bar">
+    <span id="status-cursor">游標：— cm</span>
+    <span id="status-scale">縮放 4×</span>
+    <span id="status-items">家具 0 / 區域 0</span>
+    <span style="margin-left:auto;color:var(--sub);">
+      網格：50cm/格 &nbsp;|&nbsp; 1坪 ≈ 3.3058m²
+    </span>
+  </footer>
+
+</div><!-- /#app -->
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!--  MODAL: 初始化空間                                          -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="modal-setup" class="modal-backdrop hidden">
+  <div class="modal-box">
+    <h2>🏢 設定空間大小</h2>
+
+    <div class="modal-field">
+      <label>空間名稱</label>
+      <input type="text" id="setup-name" placeholder="例：主辦公室" value="辦公室">
+    </div>
+
+    <div class="modal-divider">以坪數計算</div>
+
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>坪數</label>
+        <input type="number" id="setup-ping" placeholder="例：20" min="1" step="0.5">
+      </div>
+      <div class="modal-field" style="display:flex;align-items:flex-end;padding-bottom:1px;">
+        <div class="modal-hint">1 坪 ≈ 3.3 m²<br>輸入後自動換算</div>
+      </div>
+    </div>
+
+    <div class="modal-divider">或自訂尺寸</div>
+
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>寬度 (cm)</label>
+        <input type="number" id="setup-w" placeholder="例：1000" min="100" step="50">
+      </div>
+      <div class="modal-field">
+        <label>深度 (cm)</label>
+        <input type="number" id="setup-h" placeholder="例：800" min="100" step="50">
+      </div>
+    </div>
+
+    <div class="modal-hint" id="setup-calc-hint" style="margin-top:-6px;margin-bottom:12px;"></div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="setup-cancel" style="display:none;">取消</button>
+      <button class="btn-primary"   id="setup-confirm">建立空間</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!--  MODAL: 自訂家具                                            -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="modal-custom-fi" class="modal-backdrop hidden">
+  <div class="modal-box">
+    <h2>🪑 新增自訂家具</h2>
+
+    <div class="modal-field">
+      <label>名稱</label>
+      <input type="text" id="cfi-name" placeholder="例：接待台">
+    </div>
+
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>寬度 (cm)</label>
+        <input type="number" id="cfi-w" placeholder="例：200" min="10">
+      </div>
+      <div class="modal-field">
+        <label>深度 (cm)</label>
+        <input type="number" id="cfi-d" placeholder="例：80" min="10">
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <label>類別</label>
+      <select id="cfi-category">
+        <option value="workstation">工作站</option>
+        <option value="desk">辦公桌</option>
+        <option value="meeting">會議</option>
+        <option value="storage">儲物</option>
+        <option value="lounge">休憩</option>
+        <option value="deco">裝飾</option>
+        <option value="custom" selected>自定義</option>
+      </select>
+    </div>
+
+    <div class="modal-field">
+      <label>顏色</label>
+      <div class="color-pick-row">
+        <input type="color" id="cfi-color" value="#a8d8ea">
+        <span>點擊選擇顯示顏色</span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cfi-cancel">取消</button>
+      <button class="btn-primary"   id="cfi-save">儲存並使用</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!--  JS (order matters: state → catalog → storage → grid → layers → ui → main) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<script src="js/state.js"></script>
+<script src="js/furniture-catalog.js"></script>
+<script src="js/zone-catalog.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/grid.js"></script>
+<script src="js/layer-room.js"></script>
+<script src="js/layer-zones.js"></script>
+<script src="js/layer-furniture.js"></script>
+<script src="js/ui-toolbar.js"></script>
+<script src="js/ui-properties.js"></script>
+<script src="js/ui-dialogs.js"></script>
+<script src="js/main.js"></script>
+
+</body>
+</html>
