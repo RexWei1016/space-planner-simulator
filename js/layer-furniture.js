@@ -1,104 +1,89 @@
-/* layer-furniture.js — Layer 3：div 家具放置、拖移、旋轉（含碰撞偵測） */
+﻿/* layer-furniture.js - Layer 3: furniture rendering, drag, collision */
 'use strict';
 
-// ── Collision helpers ────────────────────────────────────────────
+function _getBaseSize(inst, def) {
+  return {
+    widthCm: inst.widthCm || def.widthCm,
+    depthCm: inst.depthCm || def.depthCm
+  };
+}
 
-/** 取得家具的 axis-aligned bounding box（cm 單位） */
-function _getBBox(xCm, yCm, rotation, def) {
+function _getFootprint(rotation, widthCm, depthCm) {
   const rot = rotation || 0;
-  const w = (rot === 90 || rot === 270) ? def.depthCm : def.widthCm;
-  const h = (rot === 90 || rot === 270) ? def.widthCm : def.depthCm;
-  return { x: xCm, y: yCm, w, h };
+  const w = (rot === 90 || rot === 270) ? depthCm : widthCm;
+  const h = (rot === 90 || rot === 270) ? widthCm : depthCm;
+  return { w, h };
 }
 
-/** 兩個矩形是否重疊（留 0.5cm 容差，讓緊貼擺放不算碰撞） */
+function _getBBox(xCm, yCm, rotation, widthCm, depthCm) {
+  const fp = _getFootprint(rotation, widthCm, depthCm);
+  return { x: xCm, y: yCm, w: fp.w, h: fp.h };
+}
+
 function _bboxOverlap(a, b) {
-  const GAP = 0.5;
-  return a.x + GAP < b.x + b.w &&
-         a.x + a.w - GAP > b.x &&
-         a.y + GAP < b.y + b.h &&
-         a.y + a.h - GAP > b.y;
+  const gap = 0.5;
+  return a.x + gap < b.x + b.w &&
+         a.x + a.w - gap > b.x &&
+         a.y + gap < b.y + b.h &&
+         a.y + a.h - gap > b.y;
 }
 
-/**
- * 檢查將 excludeId 的家具放到 (xCm, yCm, rot) 時是否與其他家具碰撞
- * excludeId = null 表示放置新家具（不排除任何現有件）
- */
-function _collidesWithOthers(excludeId, xCm, yCm, rot, def) {
-  const box = _getBBox(xCm, yCm, rot, def);
+function _collidesWithOthers(excludeId, xCm, yCm, rotation, widthCm, depthCm) {
+  const box = _getBBox(xCm, yCm, rotation, widthCm, depthCm);
   for (const other of AppState.furniture) {
     if (other.id === excludeId) continue;
     const otherDef = getFurnitureDef(other.defId);
     if (!otherDef) continue;
-    const otherBox = _getBBox(other.xCm, other.yCm, other.rotation, otherDef);
+
+    const otherSize = _getBaseSize(other, otherDef);
+    const otherBox = _getBBox(other.xCm, other.yCm, other.rotation, otherSize.widthCm, otherSize.depthCm);
     if (_bboxOverlap(box, otherBox)) return true;
   }
   return false;
 }
 
-/**
- * 碰撞時自動補位：從目標位置向外螺旋搜尋最近的無碰撞格位（以 5cm 步進）
- * 最多搜尋 20 步（100cm 半徑）。找不到則回傳 null（呼叫方應還原原位）
- */
-function _findNearestFree(excludeId, targetX, targetY, rot, def) {
-  const STEP = 5;   // 搜尋步進 5cm
-  const rw   = (rot === 90 || rot === 270) ? def.depthCm : def.widthCm;
-  const rh   = (rot === 90 || rot === 270) ? def.widthCm : def.depthCm;
-  const RW   = AppState.room.widthCm;
-  const RH   = AppState.room.heightCm;
+function _findNearestFree(excludeId, targetX, targetY, rotation, widthCm, depthCm) {
+  const step = 5;
+  const fp = _getFootprint(rotation, widthCm, depthCm);
+  const roomW = AppState.room.widthCm;
+  const roomH = AppState.room.heightCm;
 
   for (let radius = 0; radius <= 20; radius++) {
-    // 對 radius 圈的所有 (dx, dy) 組合，按距離排序後嘗試
     const candidates = [];
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
-        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue; // 只走邊框
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
         candidates.push([dx, dy, dx * dx + dy * dy]);
       }
     }
     candidates.sort((a, b) => a[2] - b[2]);
 
     for (const [dx, dy] of candidates) {
-      const tx = Math.max(0, Math.min(RW - rw, targetX + dx * STEP));
-      const ty = Math.max(0, Math.min(RH - rh, targetY + dy * STEP));
-      if (!_collidesWithOthers(excludeId, tx, ty, rot, def)) {
+      const tx = Math.max(0, Math.min(roomW - fp.w, targetX + dx * step));
+      const ty = Math.max(0, Math.min(roomH - fp.h, targetY + dy * step));
+      if (!_collidesWithOthers(excludeId, tx, ty, rotation, widthCm, depthCm)) {
         return { x: tx, y: ty };
       }
     }
   }
-  return null; // 100cm 內找不到空位
+
+  return null;
 }
 
-// ────────────────────────────────────────────────────────────────
-
 const LayerFurniture = {
-  // drag state
   _drag: null,
-  /*  {
-        id, def,
-        startMouseX, startMouseY,
-        startItemXcm, startItemYcm,   // 拖曳開始時的位置
-        origXcm, origYcm,              // 拖曳前的合法位置（用於復原）
-        colliding: false
-      }
-  */
-
   _ghost: null,
   _ghostRotation: 0,
 
-  // ── Render ───────────────────────────────────────────────────
   render() {
     const container = document.getElementById('layer-furniture');
     container.style.visibility = AppState.view.showLayer3 ? '' : 'hidden';
 
     const currentIds = new Set(AppState.furniture.map(f => f.id));
-
-    // Remove deleted
     [...container.children].forEach(el => {
       if (!currentIds.has(el.dataset.id)) el.remove();
     });
 
-    // Add / update
     for (const inst of AppState.furniture) {
       const def = getFurnitureDef(inst.defId);
       if (!def) continue;
@@ -113,7 +98,7 @@ const LayerFurniture = {
 
   _createElement(inst, def) {
     const el = document.createElement('div');
-    el.className  = 'fi-item';
+    el.className = 'fi-item';
     el.dataset.id = inst.id;
 
     const nameEl = document.createElement('div');
@@ -136,66 +121,74 @@ const LayerFurniture = {
 
   _updateElement(el, inst, def, colliding) {
     const scale = AppState.view.scale;
-    const rot   = inst.rotation || 0;
-    const rw    = (rot === 90 || rot === 270) ? def.depthCm : def.widthCm;
-    const rh    = (rot === 90 || rot === 270) ? def.widthCm : def.depthCm;
+    const rot = inst.rotation || 0;
+    const size = _getBaseSize(inst, def);
+    const fp = _getFootprint(rot, size.widthCm, size.depthCm);
 
-    el.style.left            = (inst.xCm * scale) + 'px';
-    el.style.top             = (inst.yCm * scale) + 'px';
-    el.style.width           = (rw * scale) + 'px';
-    el.style.height          = (rh * scale) + 'px';
+    el.style.left = (inst.xCm * scale) + 'px';
+    el.style.top = (inst.yCm * scale) + 'px';
+    el.style.width = (fp.w * scale) + 'px';
+    el.style.height = (fp.h * scale) + 'px';
     el.style.backgroundColor = def.color || '#a8d8ea';
-    el.style.transform       = `rotate(${rot}deg)`;
+    el.style.transform = `rotate(${rot}deg)`;
     el.style.transformOrigin = 'top left';
 
-    el.classList.toggle('selected',  AppState.selection.id === inst.id);
+    el.classList.toggle('selected', AppState.selection.id === inst.id);
     el.classList.toggle('colliding', !!colliding);
 
     const nameEl = el.querySelector('.fi-label');
     const sizeEl = el.querySelector('.fi-size-label');
     nameEl.textContent = inst.label || def.name;
-    sizeEl.textContent = `${def.widthCm}×${def.depthCm}`;
-    sizeEl.style.display = (rw * scale > 50 && rh * scale > 32) ? '' : 'none';
+    sizeEl.textContent = `${size.widthCm}×${size.depthCm}`;
+    sizeEl.style.display = (fp.w * scale > 50 && fp.h * scale > 32) ? '' : 'none';
   },
 
-  // ── Drag ─────────────────────────────────────────────────────
   _startDrag(e, inst, def) {
     this._drag = {
-      id:           inst.id,
-      def:          def,
-      startMouseX:  e.clientX,
-      startMouseY:  e.clientY,
+      id: inst.id,
+      def,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
       startItemXcm: inst.xCm,
       startItemYcm: inst.yCm,
-      origXcm:      inst.xCm,   // 安全位置（用於碰撞時還原）
-      origYcm:      inst.yCm,
-      colliding:    false
+      origXcm: inst.xCm,
+      origYcm: inst.yCm,
+      colliding: false,
+      preciseMode: false,
+      undoPushed: false
     };
   },
 
   _onMouseMove(e) {
     if (!this._drag || AppState.mode !== 'select') return;
-    const d    = this._drag;
+
+    const d = this._drag;
     const inst = AppState.furniture.find(f => f.id === d.id);
     if (!inst) return;
+
     const def = d.def;
     const rot = inst.rotation || 0;
-    const rw  = (rot === 90 || rot === 270) ? def.depthCm : def.widthCm;
-    const rh  = (rot === 90 || rot === 270) ? def.widthCm : def.depthCm;
+    const size = _getBaseSize(inst, def);
+    const fp = _getFootprint(rot, size.widthCm, size.depthCm);
 
     const dx = Grid.pxToCm(e.clientX - d.startMouseX);
     const dy = Grid.pxToCm(e.clientY - d.startMouseY);
     const rawX = d.startItemXcm + dx;
     const rawY = d.startItemYcm + dy;
 
-    // 拖曳用細粒度 snap（5cm），不受顯示格子大小影響
-    const snapX = Math.max(0, Math.min(AppState.room.widthCm  - rw, Grid.snapCmFine(rawX)));
-    const snapY = Math.max(0, Math.min(AppState.room.heightCm - rh, Grid.snapCmFine(rawY)));
+    const step = e.altKey ? 1 : 5;
+    const snapX = Math.max(0, Math.min(AppState.room.widthCm - fp.w, Grid.snapCmFine(rawX, step)));
+    const snapY = Math.max(0, Math.min(AppState.room.heightCm - fp.h, Grid.snapCmFine(rawY, step)));
 
-    const collision = _collidesWithOthers(d.id, snapX, snapY, rot, def);
-    d.colliding  = collision;
-    d.currentX   = snapX;
-    d.currentY   = snapY;
+    const collision = _collidesWithOthers(d.id, snapX, snapY, rot, size.widthCm, size.depthCm);
+    d.colliding = collision;
+    d.currentX = snapX;
+    d.currentY = snapY;
+    d.preciseMode = !!e.altKey;
+    if (!d.undoPushed && (snapX !== d.origXcm || snapY !== d.origYcm)) {
+      pushUndo();
+      d.undoPushed = true;
+    }
 
     inst.xCm = snapX;
     inst.yCm = snapY;
@@ -206,73 +199,71 @@ const LayerFurniture = {
 
   _onMouseUp() {
     if (!this._drag) return;
-    const d    = this._drag;
+
+    const d = this._drag;
     const inst = AppState.furniture.find(f => f.id === d.id);
 
     if (inst) {
-      if (d.colliding) {
-        // 自動補位：在目標附近尋找最近的無碰撞位置
-        const free = _findNearestFree(d.id, d.currentX, d.currentY, inst.rotation || 0, d.def);
+      const size = _getBaseSize(inst, d.def);
+      if (d.colliding && !d.preciseMode) {
+        const free = _findNearestFree(d.id, d.currentX, d.currentY, inst.rotation || 0, size.widthCm, size.depthCm);
         if (free) {
           inst.xCm = free.x;
           inst.yCm = free.y;
         } else {
-          // 找不到空位 → 還原
           inst.xCm = d.origXcm;
           inst.yCm = d.origYcm;
         }
+
         const el = document.querySelector(`#layer-furniture [data-id="${inst.id}"]`);
         if (el) this._updateElement(el, inst, d.def, false);
       }
-      // 不論是否碰撞，只要有移動就記 undo
-      if (inst.xCm !== d.origXcm || inst.yCm !== d.origYcm) {
-        pushUndo();
-      }
+
       Storage.saveFloorPlan();
+      UIProperties.refresh();
     }
+
     this._drag = null;
   },
 
-  // ── Ghost (placement preview) ────────────────────────────────
   showGhost(defId, rotation) {
     this._ghostRotation = rotation || 0;
     const def = getFurnitureDef(defId);
     if (!def) return;
+
     if (!this._ghost) {
       this._ghost = document.createElement('div');
       this._ghost.id = 'furniture-ghost';
       document.body.appendChild(this._ghost);
     }
-    const scale = AppState.view.scale;
-    const rot   = this._ghostRotation;
-    const rw    = (rot === 90 || rot === 270) ? def.depthCm : def.widthCm;
-    const rh    = (rot === 90 || rot === 270) ? def.widthCm : def.depthCm;
 
-    this._ghost.style.width           = (rw * scale) + 'px';
-    this._ghost.style.height          = (rh * scale) + 'px';
+    const scale = AppState.view.scale;
+    const fp = _getFootprint(this._ghostRotation, def.widthCm, def.depthCm);
+    this._ghost.style.width = (fp.w * scale) + 'px';
+    this._ghost.style.height = (fp.h * scale) + 'px';
     this._ghost.style.backgroundColor = def.color;
-    this._ghost.textContent           = def.name;
-    this._ghost.style.display         = 'block';
+    this._ghost.textContent = def.name;
+    this._ghost.style.display = 'block';
   },
 
   moveGhost(e) {
     if (!this._ghost) return;
-    this._ghost.style.left = (e.clientX + 6) + 'px';
-    this._ghost.style.top  = (e.clientY + 6) + 'px';
 
-    // 碰撞預覽：ghost 變紅提示
+    this._ghost.style.left = (e.clientX + 6) + 'px';
+    this._ghost.style.top = (e.clientY + 6) + 'px';
+
     const defId = AppState.pendingFurnitureDefId;
     if (!defId || !AppState.room.widthCm) return;
+
     const def = getFurnitureDef(defId);
     if (!def) return;
-    const rot     = this._ghostRotation;
-    const rw      = (rot === 90 || rot === 270) ? def.depthCm : def.widthCm;
-    const rh      = (rot === 90 || rot === 270) ? def.widthCm : def.depthCm;
-    const snapped = Grid.eventToCmSnapped(e);
-    const xCm     = Math.max(0, Math.min(AppState.room.widthCm  - rw, snapped.x));
-    const yCm     = Math.max(0, Math.min(AppState.room.heightCm - rh, snapped.y));
 
-    const collision = _collidesWithOthers(null, xCm, yCm, rot, def);
+    const fp = _getFootprint(this._ghostRotation, def.widthCm, def.depthCm);
+    const snapped = Grid.eventToCmSnapped(e);
+    const xCm = Math.max(0, Math.min(AppState.room.widthCm - fp.w, snapped.x));
+    const yCm = Math.max(0, Math.min(AppState.room.heightCm - fp.h, snapped.y));
+
+    const collision = _collidesWithOthers(null, xCm, yCm, this._ghostRotation, def.widthCm, def.depthCm);
     this._ghost.classList.toggle('ghost-collide', collision);
   },
 
@@ -287,51 +278,108 @@ const LayerFurniture = {
     }
   },
 
-  getGhostRotation() { return this._ghostRotation; },
+  getGhostRotation() {
+    return this._ghostRotation;
+  },
 
-  // ── Place furniture ──────────────────────────────────────────
   placeAt(e) {
     const defId = AppState.pendingFurnitureDefId;
     if (!defId) return;
+
     const def = getFurnitureDef(defId);
     if (!def) return;
-    const rot     = this._ghostRotation;
-    const rw      = (rot === 90 || rot === 270) ? def.depthCm : def.widthCm;
-    const rh      = (rot === 90 || rot === 270) ? def.widthCm : def.depthCm;
-    const snapped = Grid.eventToCmSnapped(e);
-    const xCm     = Math.max(0, Math.min(AppState.room.widthCm  - rw, snapped.x));
-    const yCm     = Math.max(0, Math.min(AppState.room.heightCm - rh, snapped.y));
 
-    // 碰撞 → 拒絕放置，ghost 閃爍紅色提示
-    if (_collidesWithOthers(null, xCm, yCm, rot, def)) {
+    const rot = this._ghostRotation;
+    const fp = _getFootprint(rot, def.widthCm, def.depthCm);
+    const snapped = Grid.eventToCmSnapped(e);
+    const xCm = Math.max(0, Math.min(AppState.room.widthCm - fp.w, snapped.x));
+    const yCm = Math.max(0, Math.min(AppState.room.heightCm - fp.h, snapped.y));
+
+    if (_collidesWithOthers(null, xCm, yCm, rot, def.widthCm, def.depthCm)) {
       this._flashGhostError();
       return;
     }
 
     const inst = {
-      id:       generateId('fi'),
-      defId:    defId,
-      xCm:      xCm,
-      yCm:      yCm,
+      id: generateId('fi'),
+      defId,
+      xCm,
+      yCm,
+      widthCm: def.widthCm,
+      depthCm: def.depthCm,
       rotation: rot,
-      label:    ''
+      label: ''
     };
+
     dispatch('ADD_FURNITURE', inst);
     dispatch('SET_SELECTION', { type: 'furniture', id: inst.id });
   },
 
+  applyManualUpdate(id, patch) {
+    const inst = AppState.furniture.find(f => f.id === id);
+    if (!inst) return { ok: false, reason: 'not-found' };
+
+    const def = getFurnitureDef(inst.defId);
+    if (!def) return { ok: false, reason: 'def-not-found' };
+
+    const curSize = _getBaseSize(inst, def);
+    const newWidth = Math.max(10, Math.round(patch.widthCm ?? curSize.widthCm));
+    const newDepth = Math.max(10, Math.round(patch.depthCm ?? curSize.depthCm));
+    const newRotation = patch.rotation == null ? (inst.rotation || 0) : patch.rotation;
+
+    const fp = _getFootprint(newRotation, newWidth, newDepth);
+    const maxX = Math.max(0, AppState.room.widthCm - fp.w);
+    const maxY = Math.max(0, AppState.room.heightCm - fp.h);
+
+    let newX = patch.xCm == null ? inst.xCm : Math.round(patch.xCm);
+    let newY = patch.yCm == null ? inst.yCm : Math.round(patch.yCm);
+    newX = Math.max(0, Math.min(maxX, newX));
+    newY = Math.max(0, Math.min(maxY, newY));
+
+    if (!_collidesWithOthers(id, newX, newY, newRotation, newWidth, newDepth)) {
+      // no-op
+    } else {
+      const free = _findNearestFree(id, newX, newY, newRotation, newWidth, newDepth);
+      if (!free) {
+        return { ok: false, reason: 'collision' };
+      }
+      newX = free.x;
+      newY = free.y;
+    }
+
+    const changed =
+      inst.xCm !== newX ||
+      inst.yCm !== newY ||
+      (inst.widthCm || def.widthCm) !== newWidth ||
+      (inst.depthCm || def.depthCm) !== newDepth ||
+      (inst.rotation || 0) !== newRotation;
+
+    if (!changed) return { ok: true };
+
+    pushUndo();
+    inst.xCm = newX;
+    inst.yCm = newY;
+    inst.widthCm = newWidth;
+    inst.depthCm = newDepth;
+    inst.rotation = newRotation;
+
+    Storage.saveFloorPlan();
+    renderAll();
+    UIProperties.refresh();
+
+    return { ok: true };
+  },
+
   _flashGhostError() {
     if (!this._ghost) return;
+
     this._ghost.classList.add('ghost-collide');
     this._ghost.style.animation = 'ghost-shake .3s ease';
     setTimeout(() => {
-      if (this._ghost) {
-        this._ghost.style.animation = '';
-      }
+      if (this._ghost) this._ghost.style.animation = '';
     }, 300);
   },
 
-  // ── Init ─────────────────────────────────────────────────────
   initEvents() {
     document.addEventListener('mousemove', e => {
       this._onMouseMove(e);

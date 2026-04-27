@@ -7,7 +7,7 @@ const LayerZones = {
   _previewEl: null,
 
   // 拖曳區域的狀態
-  _drag: null,  // { id, startMouseX, startMouseY, startZoneXcm, startZoneYcm }
+  _drag: null,  // { id, startMouseX, startMouseY, startZoneXcm, startZoneYcm, origXcm, origYcm, undoPushed }
 
   // ── Render all zones ─────────────────────────────────────────
   render() {
@@ -93,7 +93,10 @@ const LayerZones = {
       startMouseX:  e.clientX,
       startMouseY:  e.clientY,
       startZoneXcm: zone.xCm,
-      startZoneYcm: zone.yCm
+      startZoneYcm: zone.yCm,
+      origXcm:      zone.xCm,
+      origYcm:      zone.yCm,
+      undoPushed:   false
     };
     // Change cursor while dragging
     document.getElementById('layer-zones').style.cursor = 'grabbing';
@@ -109,8 +112,13 @@ const LayerZones = {
 
     const rawX = this._drag.startZoneXcm + dx;
     const rawY = this._drag.startZoneYcm + dy;
-    const newX = Math.max(0, Math.min(AppState.room.widthCm  - zone.widthCm,  Grid.snapCm(rawX)));
-    const newY = Math.max(0, Math.min(AppState.room.heightCm - zone.heightCm, Grid.snapCm(rawY)));
+    const step = e.altKey ? 1 : 5;
+    const newX = Math.max(0, Math.min(AppState.room.widthCm  - zone.widthCm,  Grid.snapCmFine(rawX, step)));
+    const newY = Math.max(0, Math.min(AppState.room.heightCm - zone.heightCm, Grid.snapCmFine(rawY, step)));
+    if (!this._drag.undoPushed && (newX !== this._drag.origXcm || newY !== this._drag.origYcm)) {
+      pushUndo();
+      this._drag.undoPushed = true;
+    }
 
     // Live-update SVG element without going through dispatch (smooth)
     const svg   = document.getElementById('layer-zones');
@@ -142,14 +150,40 @@ const LayerZones = {
   _onDragUp() {
     if (!this._drag) return;
     const zone = AppState.zones.find(z => z.id === this._drag.id);
-    if (zone) {
-      // Commit final position with undo entry
-      pushUndo();
-      Storage.saveFloorPlan();
-      UIProperties.refresh();
-    }
+    if (zone) Storage.saveFloorPlan();
+    UIProperties.refresh();
     this._drag = null;
     document.getElementById('layer-zones').style.cursor = '';
+  },
+
+  applyManualUpdate(id, patch) {
+    const zone = AppState.zones.find(z => z.id === id);
+    if (!zone) return { ok: false, reason: 'not-found' };
+
+    const widthCm = Math.max(10, Math.round(patch.widthCm ?? zone.widthCm));
+    const heightCm = Math.max(10, Math.round(patch.heightCm ?? zone.heightCm));
+    const maxX = Math.max(0, AppState.room.widthCm - widthCm);
+    const maxY = Math.max(0, AppState.room.heightCm - heightCm);
+    const xCm = Math.max(0, Math.min(maxX, Math.round(patch.xCm ?? zone.xCm)));
+    const yCm = Math.max(0, Math.min(maxY, Math.round(patch.yCm ?? zone.yCm)));
+
+    const changed =
+      zone.xCm !== xCm ||
+      zone.yCm !== yCm ||
+      zone.widthCm !== widthCm ||
+      zone.heightCm !== heightCm;
+
+    if (!changed) return { ok: true };
+
+    pushUndo();
+    zone.xCm = xCm;
+    zone.yCm = yCm;
+    zone.widthCm = widthCm;
+    zone.heightCm = heightCm;
+    Storage.saveFloorPlan();
+    renderAll();
+    UIProperties.refresh();
+    return { ok: true };
   },
 
   // ── Drawing interaction ──────────────────────────────────────

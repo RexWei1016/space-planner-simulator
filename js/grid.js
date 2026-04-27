@@ -22,15 +22,15 @@ const Grid = {
     return Math.round(px / cellPx) * cellPx;
   },
 
-  snapCm(cm) {
-    const cell = AppState.view.gridCellCm;
+  snapCm(cm, stepCm) {
+    const cell = stepCm || AppState.view.gridCellCm;
     return Math.round(cm / cell) * cell;
   },
 
   // 細粒度 snap：拖曳家具用，固定 5cm，不受網格格子大小影響
-  snapCmFine(cm) {
-    const FINE = 5;
-    return Math.round(cm / FINE) * FINE;
+  snapCmFine(cm, stepCm) {
+    const fine = stepCm || 5;
+    return Math.round(cm / fine) * fine;
   },
 
   eventToCm(e) {
