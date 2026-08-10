@@ -107,12 +107,14 @@ const Grid = {
   },
 
   // ── Draw grid canvas ─────────────────────────────────────────
-  drawGrid() {
-    const cvs  = document.getElementById('layer-grid');
-    const ctx  = cvs.getContext('2d');
-    const W    = cvs.width;
-    const H    = cvs.height;
-    const scale   = AppState.view.scale;
+  // target 省略時畫到畫面上的 #layer-grid；匯出 PNG 會傳入自己的
+  // context 與倍率，讓輸出品質不受目前畫面縮放影響。
+  drawGrid(target) {
+    const cvs  = target ? null : document.getElementById('layer-grid');
+    const ctx  = target ? target.ctx   : cvs.getContext('2d');
+    const W    = target ? target.W     : cvs.width;
+    const H    = target ? target.H     : cvs.height;
+    const scale = target ? target.scale : AppState.view.scale;
     const cellCm  = AppState.view.gridCellCm;
     const majorCm = cellCm * 2;
 

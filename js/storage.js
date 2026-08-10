@@ -7,6 +7,11 @@ const KEYS = {
   VIEW:       'ospace_view'
 };
 
+// ── PNG 匯出品質 ─────────────────────────────────────────────────
+const EXPORT_PX_PER_CM   = 4;     // 目標倍率：60cm 的椅子約 240px，看得很清楚
+const EXPORT_MAX_EDGE_PX = 6000;  // 長邊上限，超過就自動降倍率，避免產出巨無霸圖檔
+const EXPORT_PAD_PX      = 56;    // 四周留白，讓房間尺寸標註不會被切掉
+
 const Storage = {
   // ── Floor Plan ──────────────────────────────────────────────
   saveFloorPlan() {
@@ -121,44 +126,88 @@ const Storage = {
 
   // ── PNG Export ───────────────────────────────────────────────
   async exportPNG() {
-    const scale    = AppState.view.scale;
-    const W        = AppState.room.widthCm  * scale;
-    const H        = AppState.room.heightCm * scale;
+    const roomW = AppState.room.widthCm;
+    const roomH = AppState.room.heightCm;
+    if (!roomW || !roomH) { toast('還沒有設定空間'); return; }
+
+    // 匯出倍率固定，不跟著畫面縮放跑，否則縮小看全景時匯出的圖會小到不能用
+    let scale = EXPORT_PX_PER_CM;
+    const longestCm = Math.max(roomW, roomH);
+    if (longestCm * scale + EXPORT_PAD_PX * 2 > EXPORT_MAX_EDGE_PX) {
+      scale = (EXPORT_MAX_EDGE_PX - EXPORT_PAD_PX * 2) / longestCm;
+    }
+
+    const pad = EXPORT_PAD_PX;
+    const W   = Math.round(roomW * scale);
+    const H   = Math.round(roomH * scale);
+    const canvasW = W + pad * 2;
+    const canvasH = H + pad * 2;
+
+    // SVG 圖層的座標是照「目前畫面倍率」畫出來的，所以先暫時把倍率切到匯出倍率、
+    // 重畫這幾層、同步序列化成字串，再馬上還原。整段都是同步的，中間不會發生
+    // 重繪，畫面不會閃爍，而且標籤的顯示門檻也會用匯出倍率判斷。
+    const css = _collectCssText();
+    const prevScale = AppState.view.scale;
+    let svgSources;
+    try {
+      AppState.view.scale = scale;
+      LayerRoom.render();
+      LayerZones.render();
+      LayerMeasure.render();
+      svgSources = {
+        room:    _serializeSVG(document.getElementById('layer-room'),  W, H, pad, css),
+        zones:   _serializeSVG(document.getElementById('layer-zones'), W, H, pad, css),
+        measure: AppState.view.showMeasure
+          ? _serializeSVG(document.getElementById('layer-measure'), W, H, pad, css)
+          : null
+      };
+    } finally {
+      AppState.view.scale = prevScale;
+      LayerRoom.render();
+      LayerZones.render();
+      LayerMeasure.render();
+    }
+
     const offscreen = document.createElement('canvas');
-    offscreen.width  = W;
-    offscreen.height = H;
+    offscreen.width  = canvasW;
+    offscreen.height = canvasH;
     const ctx = offscreen.getContext('2d');
 
-    // 1. White background
+    // 1. 白底（含留白區）
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, canvasW, canvasH);
 
-    // 2. Grid canvas
-    const gridEl = document.getElementById('layer-grid');
-    ctx.drawImage(gridEl, 0, 0);
+    // 2. 網格：用匯出倍率重畫一份，不是把畫面上的低解析度畫布放大
+    ctx.save();
+    ctx.translate(pad, pad);
+    Grid.drawGrid({ ctx, W, H, scale });
+    ctx.restore();
 
-    // 3. Room SVG
-    await _drawSVGToCanvas(ctx, document.getElementById('layer-room'), W, H);
+    // 3~4. 邊界與區域（viewBox 已含留白位移，直接畫在 0,0）
+    await _drawSVGStringToCanvas(ctx, svgSources.room,  canvasW, canvasH);
+    await _drawSVGStringToCanvas(ctx, svgSources.zones, canvasW, canvasH);
 
-    // 4. Zones SVG
-    await _drawSVGToCanvas(ctx, document.getElementById('layer-zones'), W, H);
-
-    // 5. Furniture (draw manually)
+    // 5. 家具
+    ctx.save();
+    ctx.translate(pad, pad);
     for (const inst of AppState.furniture) {
       const def = getFurnitureDef(inst.defId);
       if (!def) continue;
       _drawFurnitureOnCanvas(ctx, inst, def, scale);
     }
+    ctx.restore();
 
     // 6. 量測線
-    if (AppState.view.showMeasure) {
-      await _drawSVGToCanvas(ctx, document.getElementById('layer-measure'), W, H);
+    if (svgSources.measure) {
+      await _drawSVGStringToCanvas(ctx, svgSources.measure, canvasW, canvasH);
     }
 
     const a = document.createElement('a');
     a.download = `${AppState.room.label}_平面圖.png`;
     a.href = offscreen.toDataURL('image/png');
     a.click();
+
+    toast(`已匯出 ${canvasW}×${canvasH} px（${scale.toFixed(1)} px/cm）`);
   }
 };
 
@@ -178,34 +227,41 @@ function _collectCssText() {
   return css;
 }
 
-function _svgToImage(svgEl, w, h) {
+// 同步把 SVG 圖層轉成字串。viewBox 往外推 pad，房間外面的尺寸標註才不會被裁掉。
+function _serializeSVG(svgEl, w, h, pad, css) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const clone = svgEl.cloneNode(true);
+
+  // 移掉 id，否則 #layer-room 之類的 width:100% 規則會蓋掉下面設定的尺寸
+  clone.removeAttribute('id');
+  clone.setAttribute('xmlns', NS);
+  clone.setAttribute('width',  w + pad * 2);
+  clone.setAttribute('height', h + pad * 2);
+  clone.setAttribute('viewBox', `${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`);
+
+  const style = document.createElementNS(NS, 'style');
+  style.textContent = css;
+  clone.insertBefore(style, clone.firstChild);
+
+  return new XMLSerializer().serializeToString(clone);
+}
+
+function _svgStringToImage(svgData) {
   return new Promise((resolve, reject) => {
-    const clone = svgEl.cloneNode(true);
-    clone.setAttribute('width',  w);
-    clone.setAttribute('height', h);
-    clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    // 移掉 id，否則 #layer-room 之類的 width:100% 規則會蓋掉上面的尺寸
-    clone.removeAttribute('id');
-
-    const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-    style.textContent = _collectCssText();
-    clone.insertBefore(style, clone.firstChild);
-
-    const svgData = new XMLSerializer().serializeToString(clone);
-    const blob    = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const url     = URL.createObjectURL(blob);
-    const img     = new Image();
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const img  = new Image();
     img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
     img.onerror = reject;
     img.src     = url;
   });
 }
 
-async function _drawSVGToCanvas(ctx, svgEl, w, h) {
+async function _drawSVGStringToCanvas(ctx, svgData, w, h) {
+  if (!svgData) return;
   try {
-    const img = await _svgToImage(svgEl, w, h);
-    ctx.drawImage(img, 0, 0);
+    const img = await _svgStringToImage(svgData);
+    ctx.drawImage(img, 0, 0, w, h);
   } catch (e) { console.warn('SVG draw failed', e); }
 }
 
