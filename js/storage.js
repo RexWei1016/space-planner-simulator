@@ -12,6 +12,12 @@ const EXPORT_PX_PER_CM   = 4;     // 目標倍率：60cm 的椅子約 240px，�
 const EXPORT_MAX_EDGE_PX = 6000;  // 長邊上限，超過就自動降倍率，避免產出巨無霸圖檔
 const EXPORT_PAD_PX      = 56;    // 四周留白，讓房間尺寸標註不會被切掉
 
+// 家具標籤字級。用「平面圖上的公分數」定義，全圖的字才會一樣大；
+// 若定成方框寬度的百分比，寬櫃子的字會比窄椅子大好幾倍。
+const EXPORT_LABEL_CM     = 7;    // 名稱字高
+const EXPORT_SUBLABEL_CM  = 5;    // 尺寸小標字高
+const EXPORT_LABEL_MIN_PX = 7;    // 收斂後小於這個就不畫，免得糊成一團
+
 const Storage = {
   // ── Floor Plan ──────────────────────────────────────────────
   saveFloorPlan() {
@@ -289,12 +295,44 @@ function _drawFurnitureOnCanvas(ctx, inst, def, scale) {
   ctx.lineWidth = 1.5;
   ctx.strokeRect(0, 0, rw, rh);
 
-  ctx.fillStyle = 'rgba(0,0,0,.6)';
-  ctx.font = `bold ${Math.max(9, rw * .09)}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const label = inst.label || def.name;
-  ctx.fillText(label, rw / 2, rh / 2);
+
+  // 字級全圖一致，只有在方框塞不下時才往下收
+  const nameSize = Math.min(EXPORT_LABEL_CM * scale, rh * 0.42);
+  const subSize  = Math.min(EXPORT_SUBLABEL_CM * scale, rh * 0.26);
+  const maxTextW = rw * 0.88;
+
+  // 高度夠放兩行時才補上尺寸小標，跟畫面上的顯示一致
+  const showSub = rh > (nameSize + subSize) * 2 && rw > subSize * 6;
+
+  if (nameSize >= EXPORT_LABEL_MIN_PX) {
+    const name = _fitText(ctx, inst.label || def.name, maxTextW, nameSize, 'bold');
+    if (name) {
+      ctx.fillStyle = 'rgba(0,0,0,.7)';
+      ctx.font = `bold ${nameSize}px sans-serif`;
+      ctx.fillText(name, rw / 2, showSub ? rh / 2 - subSize * 0.7 : rh / 2);
+    }
+  }
+
+  if (showSub && subSize >= EXPORT_LABEL_MIN_PX) {
+    const sub = _fitText(ctx, `${widthCm}×${depthCm}`, maxTextW, subSize, 'normal');
+    if (sub) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      ctx.font = `${subSize}px sans-serif`;
+      ctx.fillText(sub, rw / 2, rh / 2 + nameSize * 0.75);
+    }
+  }
 
   ctx.restore();
+}
+
+// 把文字塞進指定寬度：放不下就從尾端裁掉並補上省略號
+function _fitText(ctx, text, maxW, fontPx, weight) {
+  ctx.font = `${weight} ${fontPx}px sans-serif`;
+  if (ctx.measureText(text).width <= maxW) return text;
+
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+  return t.length > 1 ? t + '…' : '';
 }
