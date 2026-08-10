@@ -97,12 +97,12 @@ const UIToolbar = {
       card.className = 'catalog-card';
       card.dataset.defId = def.id;
       card.innerHTML = `
-        <div class="catalog-swatch" style="background:${def.color}"></div>
+        <div class="catalog-swatch" style="background:${escapeHtml(def.color)}"></div>
         <div class="catalog-info">
-          <div class="catalog-name">${def.name}</div>
+          <div class="catalog-name">${escapeHtml(def.name)}</div>
           <div class="catalog-size">${def.widthCm}×${def.depthCm} cm</div>
         </div>
-        ${def.isCustom ? '<button class="btn-del-custom" title="刪除" data-id="'+def.id+'">✕</button>' : ''}
+        ${def.isCustom ? '<button class="btn-del-custom" title="刪除" data-id="' + escapeHtml(def.id) + '">✕</button>' : ''}
       `;
       card.addEventListener('click', e => {
         if (e.target.classList.contains('btn-del-custom')) return;
@@ -147,8 +147,8 @@ const UIToolbar = {
       chip.className = 'zone-type-chip';
       chip.dataset.type = zt.type;
       chip.innerHTML = `
-        <div class="zone-color-dot" style="background:${zt.color}"></div>
-        <span>${zt.icon} ${zt.label}</span>
+        <div class="zone-color-dot" style="background:${escapeHtml(zt.color)}"></div>
+        <span>${escapeHtml(zt.icon)} ${escapeHtml(zt.label)}</span>
       `;
       chip.addEventListener('click', () => {
         AppState.pendingZoneType = zt.type;

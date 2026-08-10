@@ -38,7 +38,7 @@ const UIProperties = {
         <div class="info-cell"><div class="info-label">坪數</div><div class="info-value">${ping} 坪</div></div>
         <div class="info-cell"><div class="info-label">面積</div><div class="info-value">${(r.widthCm * r.heightCm / 10000).toFixed(2)} m²</div></div>
       </div>
-      <button class="btn-resize-room" id="btn-resize-room">調整空間大小</button>
+      <button class="btn-panel primary" id="btn-resize-room" style="margin-top:6px;">調整空間大小</button>
 
       <div style="margin-top:18px;">
         <h3>統計</h3>
@@ -85,12 +85,12 @@ const UIProperties = {
 
       <div class="prop-row">
         <label>類型</label>
-        <div style="font-weight:600;">${def.name}</div>
+        <div style="font-weight:600;">${escapeHtml(def.name)}</div>
       </div>
 
       <div class="prop-row">
         <label>標籤</label>
-        <input type="text" id="fi-label-input" value="${inst.label || ''}" placeholder="${def.name}">
+        <input type="text" id="fi-label-input" value="${escapeHtml(inst.label || '')}" placeholder="${escapeHtml(def.name)}">
       </div>
 
       <div class="prop-row">
@@ -106,7 +106,7 @@ const UIProperties = {
           <input type="number" id="fi-w" value="${Math.round(widthCm)}" min="10" step="1" placeholder="寬">
           <input type="number" id="fi-d" value="${Math.round(depthCm)}" min="10" step="1" placeholder="深">
         </div>
-        <button id="btn-fi-apply" style="margin-top:8px;">套用位置/尺寸</button>
+        <button class="btn-panel primary" id="btn-fi-apply">套用位置/尺寸</button>
       </div>
 
       <div class="prop-row" style="margin-top:4px;">
@@ -115,8 +115,10 @@ const UIProperties = {
         </div>
       </div>
 
-      <button class="btn-panel" id="btn-duplicate-fi" style="margin-top:10px;">📋 複製此物件 (Ctrl+D)</button>
-      <button class="btn-danger" id="btn-delete-fi" style="margin-top:6px;">刪除此物件</button>
+      <div class="panel-actions">
+        <button class="btn-panel" id="btn-duplicate-fi">📋 複製此物件 (Ctrl+D)</button>
+        <button class="btn-panel danger" id="btn-delete-fi">刪除此物件</button>
+      </div>
     `;
 
     document.getElementById('fi-label-input')?.addEventListener('change', e => {
@@ -159,7 +161,7 @@ const UIProperties = {
 
   _showZone(panel, zone) {
     const typeOptions = ZONE_TYPES.map(zt =>
-      `<option value="${zt.type}"${zone.type === zt.type ? ' selected' : ''}>${zt.icon} ${zt.label}</option>`
+      `<option value="${escapeHtml(zt.type)}"${zone.type === zt.type ? ' selected' : ''}>${escapeHtml(zt.icon)} ${escapeHtml(zt.label)}</option>`
     ).join('');
 
     panel.innerHTML = `
@@ -172,7 +174,7 @@ const UIProperties = {
 
       <div class="prop-row">
         <label>標籤</label>
-        <input type="text" id="zone-label-input" value="${zone.label || ''}">
+        <input type="text" id="zone-label-input" value="${escapeHtml(zone.label || '')}">
       </div>
 
       <div class="prop-row">
@@ -191,11 +193,13 @@ const UIProperties = {
           <input type="number" id="zone-w" value="${Math.round(zone.widthCm)}" min="10" step="1" placeholder="寬">
           <input type="number" id="zone-h" value="${Math.round(zone.heightCm)}" min="10" step="1" placeholder="高">
         </div>
-        <button id="btn-zone-apply" style="margin-top:8px;">套用位置/尺寸</button>
+        <button class="btn-panel primary" id="btn-zone-apply">套用位置/尺寸</button>
       </div>
 
-      <button class="btn-panel" id="btn-duplicate-zone" style="margin-top:10px;">📋 複製此區域 (Ctrl+D)</button>
-      <button class="btn-danger" id="btn-delete-zone" style="margin-top:6px;">刪除此區域</button>
+      <div class="panel-actions">
+        <button class="btn-panel" id="btn-duplicate-zone">📋 複製此區域 (Ctrl+D)</button>
+        <button class="btn-panel danger" id="btn-delete-zone">刪除此區域</button>
+      </div>
     `;
 
     document.getElementById('zone-type-sel')?.addEventListener('change', e => {

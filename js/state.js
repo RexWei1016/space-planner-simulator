@@ -27,6 +27,15 @@ function formatScale(s) {
   return s >= 1 ? String(Math.round(s * 10) / 10) : s.toFixed(2);
 }
 
+// 使用者輸入的字串要進 HTML template 前一律先過這裡。
+// 沒跳脫的話，標籤裡的 " 會提早關掉屬性、< 會被當成標籤，版面就散了；
+// 匯入別人給的 JSON 時，還可能被塞進可執行的內容。
+const _HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => _HTML_ESCAPES[c]);
+}
+
 const AppState = {
   room: {
     widthCm:  0,

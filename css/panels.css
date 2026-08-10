@@ -56,19 +56,49 @@
   text-align: right;
 }
 
-/* Danger button */
-.btn-danger {
+/* ── 面板動作按鈕 ────────────────────────────────────────
+   一個 base + 兩個變體，屬性面板裡的按鈕全部走這套：
+   .btn-panel          中性（複製）
+   .btn-panel.primary  主要動作（套用、調整空間大小）
+   .btn-panel.danger   破壞性動作（刪除）                    */
+.btn-panel {
   width: 100%;
   padding: 7px;
   border-radius: var(--radius-sm);
-  background: #fff0f2;
-  color: var(--danger);
-  border: 1px solid #f5b8c0;
+  background: var(--panel-alt);
+  color: var(--ink);
+  border: 1px solid var(--line);
   font-size: 12px;
   font-weight: 600;
-  transition: background .12s;
+  transition: background .12s, color .12s, border-color .12s;
 }
-.btn-danger:hover { background: #ffe0e5; }
+.btn-panel:hover {
+  background: var(--primary-lt);
+  color: var(--primary);
+  border-color: #b3d6eb;
+}
+
+.btn-panel.primary {
+  background: var(--primary-lt);
+  color: var(--primary);
+  border-color: #b3d6eb;
+}
+.btn-panel.primary:hover { background: #c5e4f5; }
+
+.btn-panel.danger {
+  background: #fff0f2;
+  color: var(--danger);
+  border-color: #f5b8c0;
+}
+.btn-panel.danger:hover { background: #ffe0e5; color: var(--danger); border-color: #f5b8c0; }
+
+/* 面板底部的按鈕組 */
+.panel-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
 
 /* Room info */
 .room-info-grid {
@@ -96,33 +126,6 @@
   color: var(--ink);
 }
 
-.btn-resize-room {
-  width: 100%;
-  padding: 7px;
-  border-radius: var(--radius-sm);
-  background: var(--primary-lt);
-  color: var(--primary);
-  border: 1px solid #b3d6eb;
-  font-size: 12px;
-  font-weight: 600;
-  transition: background .12s;
-  margin-top: 6px;
-}
-.btn-resize-room:hover { background: #c5e4f5; }
-
-/* 面板動作按鈕（複製等） */
-.btn-panel {
-  width: 100%;
-  padding: 7px;
-  border-radius: var(--radius-sm);
-  background: var(--panel-alt);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  font-size: 12px;
-  font-weight: 600;
-  transition: background .12s;
-}
-.btn-panel:hover { background: var(--primary-lt); color: var(--primary); }
 
 /* ── Modal backdrop ─────────────────────────────────────── */
 .modal-backdrop {
