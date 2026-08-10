@@ -17,11 +17,18 @@ const UIToolbar = {
     document.getElementById('btn-mode-select').addEventListener('click', () => setMode('select'));
     document.getElementById('btn-mode-zone').addEventListener('click',   () => setMode('draw-zone'));
     document.getElementById('btn-mode-furniture').addEventListener('click', () => setMode('place-furniture'));
+    document.getElementById('btn-mode-measure').addEventListener('click', () => setMode('measure'));
+    document.getElementById('btn-clear-measure').addEventListener('click', () => LayerMeasure.clearAll());
   },
 
   setActiveMode(mode) {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-    const map = { 'select': 'btn-mode-select', 'draw-zone': 'btn-mode-zone', 'place-furniture': 'btn-mode-furniture' };
+    const map = {
+      'select':          'btn-mode-select',
+      'draw-zone':       'btn-mode-zone',
+      'place-furniture': 'btn-mode-furniture',
+      'measure':         'btn-mode-measure'
+    };
     const el = document.getElementById(map[mode]);
     if (el) el.classList.add('active');
 
@@ -35,7 +42,8 @@ const UIToolbar = {
     const toggles = [
       { id: 'toggle-layer1', key: 'showLayer1', layerId: 'layer-room'      },
       { id: 'toggle-layer2', key: 'showLayer2', layerId: 'layer-zones'     },
-      { id: 'toggle-layer3', key: 'showLayer3', layerId: 'layer-furniture' }
+      { id: 'toggle-layer3', key: 'showLayer3', layerId: 'layer-furniture' },
+      { id: 'toggle-measure', key: 'showMeasure', layerId: 'layer-measure' }
     ];
     toggles.forEach(({ id, key, layerId }) => {
       const cb = document.getElementById(id);
@@ -153,6 +161,17 @@ const UIToolbar = {
   },
 
   // ── Zoom controls ────────────────────────────────────────────
+  // 縮放範圍跨了近 70 倍（0.15 ~ 10），線性滑桿會把常用的 2~5 倍
+  // 擠在最右側，因此滑桿位置 0~100 對應到對數刻度。
+  _sliderToScale(pos) {
+    return SCALE_MIN * Math.pow(SCALE_MAX / SCALE_MIN, pos / 100);
+  },
+
+  _scaleToSlider(scale) {
+    const s = Math.max(SCALE_MIN, Math.min(SCALE_MAX, scale));
+    return 100 * Math.log(s / SCALE_MIN) / Math.log(SCALE_MAX / SCALE_MIN);
+  },
+
   _buildZoomControls() {
     const slider  = document.getElementById('zoom-slider');
     const zoomIn  = document.getElementById('btn-zoom-in');
@@ -160,32 +179,34 @@ const UIToolbar = {
     const fitBtn  = document.getElementById('btn-zoom-fit');
 
     if (slider) {
-      slider.min   = 1; slider.max = 10; slider.step = 0.5;
-      slider.value = AppState.view.scale;
-      slider.addEventListener('input', () => Grid.setScale(+slider.value));
+      slider.min = 0; slider.max = 100; slider.step = 1;
+      slider.value = this._scaleToSlider(AppState.view.scale);
+      slider.addEventListener('input', () => Grid.setScale(this._sliderToScale(+slider.value)));
     }
-    if (zoomIn)  zoomIn.addEventListener('click',  () => Grid.setScale(AppState.view.scale + 0.5));
-    if (zoomOut) zoomOut.addEventListener('click',  () => Grid.setScale(AppState.view.scale - 0.5));
-    if (fitBtn)  fitBtn.addEventListener('click',   () => this._fitToScreen());
+    // 每一步固定放大/縮小 25%，在整個範圍內手感一致
+    if (zoomIn)  zoomIn.addEventListener('click',  () => Grid.setScale(AppState.view.scale * 1.25));
+    if (zoomOut) zoomOut.addEventListener('click', () => Grid.setScale(AppState.view.scale / 1.25));
+    if (fitBtn)  fitBtn.addEventListener('click',  () => this._fitToScreen());
   },
 
   updateZoomLabel() {
     const slider = document.getElementById('zoom-slider');
     const label  = document.getElementById('zoom-label');
-    if (slider) slider.value = AppState.view.scale;
-    if (label)  label.textContent = `${AppState.view.scale}×`;
-    document.getElementById('status-scale').textContent = `縮放 ${AppState.view.scale}×`;
+    const text   = `${formatScale(AppState.view.scale)}×`;
+    if (slider) slider.value = this._scaleToSlider(AppState.view.scale);
+    if (label)  label.textContent = text;
+    document.getElementById('status-scale').textContent = `縮放 ${text}`;
   },
 
   _fitToScreen() {
     const viewport = document.getElementById('canvas-viewport');
     if (!AppState.room.widthCm) return;
+    // 48 = #canvas-stage 左右（上下）各 24px 的 margin
     const vw = viewport.clientWidth  - 48;
     const vh = viewport.clientHeight - 48;
     const sx = vw / AppState.room.widthCm;
     const sy = vh / AppState.room.heightCm;
-    const s  = Math.max(1, Math.min(10, Math.floor(Math.min(sx, sy) * 2) / 2));
-    Grid.setScale(s);
+    Grid.setScale(Math.min(sx, sy));
   },
 
   // ── Collapsible sections ─────────────────────────────────────
@@ -204,8 +225,8 @@ function setMode(mode) {
   UIToolbar.setActiveMode(mode);
 
   const overlay = document.getElementById('interaction-overlay');
-  // Overlay captures events for draw-zone; furniture placement uses viewport click
-  overlay.style.pointerEvents = (mode === 'draw-zone') ? 'all' : 'none';
+  // Overlay captures events for draw-zone / measure; furniture placement uses viewport click
+  overlay.style.pointerEvents = (mode === 'draw-zone' || mode === 'measure') ? 'all' : 'none';
 
   if (mode !== 'place-furniture') {
     LayerFurniture.hideGhost();

@@ -51,9 +51,18 @@ const UIProperties = {
       <div style="margin-top:18px; font-size:11px; color:var(--sub); line-height:1.6;">
         <b>快捷鍵</b><br>
         Ctrl+Z / Ctrl+Y：復原 / 重做<br>
+        Ctrl+D：原地複製選取<br>
+        Ctrl+C / Ctrl+V：複製 / 貼到游標位置<br>
         R：旋轉物件<br>
         Delete：刪除選取<br>
-        Alt + 拖曳：精準 1cm（家具不自動排擠）
+        Alt + 拖曳：精準 1cm（家具不自動排擠）<br>
+        Alt + 放置/繪製：改用 1cm 而非網格<br>
+        選取後拖曳四周控制點：改尺寸<br>
+        <br>
+        <b>測量模式</b><br>
+        拖曳畫出量測線，端點會吸附桌角與牆面<br>
+        Shift：鎖水平／垂直<br>
+        點擊量測線：刪除該條
       </div>
     `;
 
@@ -106,7 +115,8 @@ const UIProperties = {
         </div>
       </div>
 
-      <button class="btn-danger" id="btn-delete-fi" style="margin-top:10px;">刪除此物件</button>
+      <button class="btn-panel" id="btn-duplicate-fi" style="margin-top:10px;">📋 複製此物件 (Ctrl+D)</button>
+      <button class="btn-danger" id="btn-delete-fi" style="margin-top:6px;">刪除此物件</button>
     `;
 
     document.getElementById('fi-label-input')?.addEventListener('change', e => {
@@ -135,6 +145,11 @@ const UIProperties = {
       if (!result.ok) {
         alert('目前位置與尺寸無法放置（與其他物件重疊且找不到可用位置）。');
       }
+    });
+
+    document.getElementById('btn-duplicate-fi')?.addEventListener('click', () => {
+      const res = LayerFurniture.duplicate(inst.id);
+      toast(res.ok ? '已複製物件' : '找不到可放置的位置');
     });
 
     document.getElementById('btn-delete-fi')?.addEventListener('click', () => {
@@ -179,7 +194,8 @@ const UIProperties = {
         <button id="btn-zone-apply" style="margin-top:8px;">套用位置/尺寸</button>
       </div>
 
-      <button class="btn-danger" id="btn-delete-zone" style="margin-top:10px;">刪除此區域</button>
+      <button class="btn-panel" id="btn-duplicate-zone" style="margin-top:10px;">📋 複製此區域 (Ctrl+D)</button>
+      <button class="btn-danger" id="btn-delete-zone" style="margin-top:6px;">刪除此區域</button>
     `;
 
     document.getElementById('zone-type-sel')?.addEventListener('change', e => {
@@ -208,6 +224,11 @@ const UIProperties = {
         widthCm: wCm,
         heightCm: hCm
       });
+    });
+
+    document.getElementById('btn-duplicate-zone')?.addEventListener('click', () => {
+      const res = LayerZones.duplicate(zone.id);
+      toast(res.ok ? '已複製區域' : '無法複製此區域');
     });
 
     document.getElementById('btn-delete-zone')?.addEventListener('click', () => {

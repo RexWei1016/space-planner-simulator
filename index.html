@@ -4,11 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>辦公室空間規畫模擬器</title>
-  <link rel="stylesheet" href="css/theme.css">
-  <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/toolbar.css">
-  <link rel="stylesheet" href="css/panels.css">
-  <link rel="stylesheet" href="css/canvas.css">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       版本號 / 快取破除
+       每次改完 css 或 js 要部署時，把下面 meta 的 content 和所有
+       ?v= 一起換成新的值（日期 + 流水號即可）。瀏覽器會把 ?v= 不同
+       的網址當成不同檔案，舊的快取就一定會被繞過。
+       ═══════════════════════════════════════════════════════════ -->
+  <meta name="app-version" content="20260810a">
+
+  <link rel="stylesheet" href="css/theme.css?v=20260810a">
+  <link rel="stylesheet" href="css/layout.css?v=20260810a">
+  <link rel="stylesheet" href="css/toolbar.css?v=20260810a">
+  <link rel="stylesheet" href="css/panels.css?v=20260810a">
+  <link rel="stylesheet" href="css/canvas.css?v=20260810a">
 </head>
 <body class="mode-select">
 
@@ -50,7 +59,11 @@
           <button class="mode-btn" id="btn-mode-furniture">
             <span class="mode-icon">🪑</span> 放置家具
           </button>
+          <button class="mode-btn" id="btn-mode-measure">
+            <span class="mode-icon">📏</span> 測量距離
+          </button>
         </div>
+        <button class="btn-clear-measure" id="btn-clear-measure">清除所有量測線</button>
       </div>
     </div>
 
@@ -74,6 +87,10 @@
             <input type="checkbox" id="toggle-layer3" checked>
             <span>🪑 家具 (Layer 3)</span>
           </label>
+          <label class="layer-toggle">
+            <input type="checkbox" id="toggle-measure" checked>
+            <span>📏 量測線</span>
+          </label>
         </div>
       </div>
     </div>
@@ -87,12 +104,12 @@
       <div class="sidebar-section-body">
         <div class="zoom-controls">
           <button class="btn-zoom" id="btn-zoom-out">−</button>
-          <input type="range" id="zoom-slider" min="1" max="10" step="0.5" value="4">
+          <input type="range" id="zoom-slider" min="0" max="100" step="1" value="60">
           <button class="btn-zoom" id="btn-zoom-in">＋</button>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
+        <div class="zoom-readout">
           <span class="zoom-label" id="zoom-label">4×</span>
-          <button class="btn-zoom" id="btn-zoom-fit" style="width:auto;padding:0 8px;font-size:11px;">適合畫面</button>
+          <button class="btn-zoom-fit" id="btn-zoom-fit">適合畫面</button>
         </div>
       </div>
     </div>
@@ -155,6 +172,7 @@
       <svg    id="layer-zones"     xmlns="http://www.w3.org/2000/svg" overflow="visible"></svg>
       <div    id="layer-furniture"></div>
       <div    id="interaction-overlay"></div>
+      <svg    id="layer-measure"   xmlns="http://www.w3.org/2000/svg" overflow="visible"></svg>
     </div>
   </main>
 
@@ -169,7 +187,7 @@
     <span id="status-scale">縮放 4×</span>
     <span id="status-items">家具 0 / 區域 0</span>
     <span style="margin-left:auto;color:var(--sub);">
-      網格：50cm/格 &nbsp;|&nbsp; 1坪 ≈ 3.3058m²
+      網格：50cm/格 &nbsp;|&nbsp; 1坪 ≈ 3.3058m² &nbsp;|&nbsp; <span id="status-version">—</span>
     </span>
   </footer>
 
@@ -278,18 +296,19 @@
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!--  JS (order matters: state → catalog → storage → grid → layers → ui → main) -->
 <!-- ═══════════════════════════════════════════════════════════ -->
-<script src="js/state.js"></script>
-<script src="js/furniture-catalog.js"></script>
-<script src="js/zone-catalog.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/grid.js"></script>
-<script src="js/layer-room.js"></script>
-<script src="js/layer-zones.js"></script>
-<script src="js/layer-furniture.js"></script>
-<script src="js/ui-toolbar.js"></script>
-<script src="js/ui-properties.js"></script>
-<script src="js/ui-dialogs.js"></script>
-<script src="js/main.js"></script>
+<script src="js/state.js?v=20260810a"></script>
+<script src="js/furniture-catalog.js?v=20260810a"></script>
+<script src="js/zone-catalog.js?v=20260810a"></script>
+<script src="js/storage.js?v=20260810a"></script>
+<script src="js/grid.js?v=20260810a"></script>
+<script src="js/layer-room.js?v=20260810a"></script>
+<script src="js/layer-zones.js?v=20260810a"></script>
+<script src="js/layer-furniture.js?v=20260810a"></script>
+<script src="js/layer-measure.js?v=20260810a"></script>
+<script src="js/ui-toolbar.js?v=20260810a"></script>
+<script src="js/ui-properties.js?v=20260810a"></script>
+<script src="js/ui-dialogs.js?v=20260810a"></script>
+<script src="js/main.js?v=20260810a"></script>
 
 </body>
 </html>

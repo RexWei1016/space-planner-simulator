@@ -17,6 +17,7 @@ const Storage = {
         room:       { ...AppState.room },
         zones:      JSON.parse(JSON.stringify(AppState.zones)),
         furniture:  JSON.parse(JSON.stringify(AppState.furniture)),
+        measurements: JSON.parse(JSON.stringify(AppState.measurements)),
         customFurnitureDefs: AppState.furnitureCatalog.filter(d => d.isCustom)
       };
       localStorage.setItem(KEYS.FLOORPLAN, JSON.stringify(data));
@@ -28,9 +29,10 @@ const Storage = {
       const raw = localStorage.getItem(KEYS.FLOORPLAN);
       if (!raw) return false;
       const data = JSON.parse(raw);
-      AppState.room      = { ...AppState.room, ...data.room };
-      AppState.zones     = data.zones     || [];
-      AppState.furniture = data.furniture || [];
+      AppState.room         = { ...AppState.room, ...data.room };
+      AppState.zones        = data.zones     || [];
+      AppState.furniture    = data.furniture || [];
+      AppState.measurements = data.measurements || [];   // 舊存檔沒有這欄
       if (data.customFurnitureDefs) {
         data.customFurnitureDefs.forEach(def => {
           def.isCustom = true;
@@ -76,6 +78,7 @@ const Storage = {
       room:       { ...AppState.room },
       zones:      JSON.parse(JSON.stringify(AppState.zones)),
       furniture:  JSON.parse(JSON.stringify(AppState.furniture)),
+      measurements: JSON.parse(JSON.stringify(AppState.measurements)),
       customFurnitureDefs: AppState.furnitureCatalog.filter(d => d.isCustom)
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -94,10 +97,11 @@ const Storage = {
         try {
           const data = JSON.parse(e.target.result);
           if (!data.room || !data.zones || !data.furniture) throw new Error('格式錯誤');
-          AppState.room      = { ...AppState.room, ...data.room };
-          AppState.zones     = data.zones;
-          AppState.furniture = data.furniture;
-          AppState.selection = { type: null, id: null };
+          AppState.room         = { ...AppState.room, ...data.room };
+          AppState.zones        = data.zones;
+          AppState.furniture    = data.furniture;
+          AppState.measurements = data.measurements || [];
+          AppState.selection    = { type: null, id: null };
           if (data.customFurnitureDefs) {
             data.customFurnitureDefs.forEach(def => {
               def.isCustom = true;
@@ -144,6 +148,11 @@ const Storage = {
       const def = getFurnitureDef(inst.defId);
       if (!def) continue;
       _drawFurnitureOnCanvas(ctx, inst, def, scale);
+    }
+
+    // 6. 量測線
+    if (AppState.view.showMeasure) {
+      await _drawSVGToCanvas(ctx, document.getElementById('layer-measure'), W, H);
     }
 
     const a = document.createElement('a');

@@ -11,7 +11,8 @@
 #layer-room,
 #layer-zones,
 #layer-furniture,
-#interaction-overlay {
+#interaction-overlay,
+#layer-measure {
   position: absolute;
   top: 0;
   left: 0;
@@ -24,11 +25,56 @@
 #layer-zones       { z-index: 2; overflow: visible; }
 #layer-furniture   { z-index: 3; pointer-events: none; }
 #interaction-overlay { z-index: 4; pointer-events: none; }
+/* 量測線在最上層，但只有測量模式下才吃滑鼠事件（才點得到、刪得掉） */
+#layer-measure     { z-index: 5; pointer-events: none; overflow: visible; }
 
 /* Cursor modes */
 body.mode-select   #canvas-viewport { cursor: default; }
 body.mode-draw-zone #canvas-viewport { cursor: crosshair; }
 body.mode-place-furniture #canvas-viewport { cursor: none; }
+body.mode-measure  #canvas-viewport { cursor: crosshair; }
+
+/* ── 量測線 ─────────────────────────────────────────────── */
+.measure-line {
+  stroke: #d9480f;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.measure-tick {
+  stroke: #d9480f;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.measure-text {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #a83208;
+  paint-order: stroke;
+  user-select: none;
+}
+
+.measure-subtext {
+  font-size: 9px;
+  font-weight: 600;
+  fill: #c25a2a;
+}
+
+.measure-label-bg {
+  fill: rgba(255, 255, 255, .88);
+  stroke: rgba(217, 72, 15, .35);
+  stroke-width: 1;
+}
+
+/* 預覽中的量測線用虛線區分 */
+.measure-preview .measure-line { stroke-dasharray: 5 4; }
+
+/* 只有測量模式才可點選刪除 */
+body.mode-measure .measure-group { pointer-events: all; cursor: pointer; }
+body.mode-measure .measure-group:hover .measure-line,
+body.mode-measure .measure-group:hover .measure-tick { stroke: #f03e3e; stroke-width: 2.5; }
+body.mode-measure .measure-group:hover .measure-label-bg { fill: #ffe3e3; }
 
 /* ── Furniture divs ─────────────────────────────────────── */
 .fi-item {
@@ -45,7 +91,7 @@ body.mode-place-furniture #canvas-viewport { cursor: none; }
   user-select: none;
   transition: box-shadow .1s;
   overflow: hidden;
-  /* transform-origin top left is set via JS for rotation anchor */
+  /* 旋轉以「交換寬深」表示，不使用 CSS transform（見 layer-furniture.js） */
 }
 
 .fi-item:hover {
@@ -69,6 +115,44 @@ body.mode-place-furniture #canvas-viewport { cursor: none; }
   cursor: not-allowed;
 }
 
+/* ── 拖拉縮放控制點 ─────────────────────────────────────── */
+.fi-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: #fff;
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  display: none;          /* 只有選取時顯示 */
+  z-index: 30;
+}
+
+.fi-item.selected .fi-handle { display: block; }
+
+/* 八個方位。.fi-item 是 overflow:hidden，所以控制點要完全落在框內，
+   否則會被裁掉 —— 因此用負 margin 往內收，而不是跨坐在邊界上。 */
+.fi-handle-nw { left: 0;    top: 0;                             cursor: nw-resize; }
+.fi-handle-n  { left: 50%;  top: 0;    margin-left: -4.5px;      cursor: n-resize;  }
+.fi-handle-ne { left: 100%; top: 0;    margin-left: -9px;        cursor: ne-resize; }
+.fi-handle-w  { left: 0;    top: 50%;  margin-top: -4.5px;       cursor: w-resize;  }
+.fi-handle-e  { left: 100%; top: 50%;  margin: -4.5px 0 0 -9px;  cursor: e-resize;  }
+.fi-handle-sw { left: 0;    top: 100%; margin-top: -9px;         cursor: sw-resize; }
+.fi-handle-s  { left: 50%;  top: 100%; margin: -9px 0 0 -4.5px;  cursor: s-resize;  }
+.fi-handle-se { left: 100%; top: 100%; margin: -9px 0 0 -9px;    cursor: se-resize; }
+
+/* 物件太小時控制點會擋住本體，此時只留四角 */
+.fi-item.tiny .fi-handle-n,
+.fi-item.tiny .fi-handle-s,
+.fi-item.tiny .fi-handle-e,
+.fi-item.tiny .fi-handle-w { display: none; }
+
+.zone-handle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
 .fi-label {
   font-size: 10px;
   font-weight: 600;
@@ -86,6 +170,10 @@ body.mode-place-furniture #canvas-viewport { cursor: none; }
   font-size: 9px;
   color: rgba(0,0,0,.45);
   pointer-events: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Ghost element for placement preview */

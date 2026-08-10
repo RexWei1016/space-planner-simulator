@@ -110,6 +110,20 @@
 }
 .btn-resize-room:hover { background: #c5e4f5; }
 
+/* 面板動作按鈕（複製等） */
+.btn-panel {
+  width: 100%;
+  padding: 7px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background .12s;
+}
+.btn-panel:hover { background: var(--primary-lt); color: var(--primary); }
+
 /* ── Modal backdrop ─────────────────────────────────────── */
 .modal-backdrop {
   position: fixed;

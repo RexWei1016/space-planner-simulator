@@ -56,25 +56,86 @@
   cursor: pointer;
 }
 
+/* 清除量測線 */
+.btn-clear-measure {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  color: var(--sub);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background .12s;
+}
+.btn-clear-measure:hover { background: #ffe3e3; color: #c92a2a; border-color: #ffc9c9; }
+
 /* Zoom controls */
 .zoom-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
+/* 加粗滑桿，讓軌道與滑鈕都好瞄準 */
 .zoom-controls input[type="range"] {
   flex: 1;
-  accent-color: var(--primary);
+  min-width: 0;
+  height: 34px;              /* 加大可點擊高度 */
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.zoom-controls input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.zoom-controls input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;          /* (track 6 - thumb 20) / 2 */
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.zoom-controls input[type="range"]:hover::-webkit-slider-thumb {
+  background: var(--accent);
+}
+
+.zoom-controls input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.zoom-controls input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.zoom-controls input[type="range"]:hover::-moz-range-thumb {
+  background: var(--accent);
 }
 
 .btn-zoom {
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
+  flex: none;
   border-radius: var(--radius-sm);
   background: var(--panel-alt);
   color: var(--ink);
-  font-size: 16px;
+  font-size: 20px;
+  font-weight: 700;
   line-height: 1;
   border: 1px solid var(--line);
   display: flex;
@@ -83,13 +144,39 @@
   transition: background .12s;
 }
 .btn-zoom:hover { background: var(--primary-lt); color: var(--primary); }
+.btn-zoom:active { background: var(--primary); color: #fff; }
+
+/* 縮放倍率 + 適合畫面 */
+.zoom-readout {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
 
 .zoom-label {
-  font-size: 11px;
-  color: var(--sub);
-  min-width: 36px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 48px;
   text-align: center;
 }
+
+.btn-zoom-fit {
+  height: 30px;
+  padding: 0 12px;
+  flex: 1;
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  transition: background .12s;
+}
+.btn-zoom-fit:hover { background: var(--primary-lt); color: var(--primary); }
+.btn-zoom-fit:active { background: var(--primary); color: #fff; }
 
 /* Furniture catalog cards */
 .catalog-list {

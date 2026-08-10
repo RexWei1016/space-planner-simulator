@@ -1,6 +1,9 @@
 /* layer-zones.js — Layer 2：SVG 區域繪製、渲染、拖曳 */
 'use strict';
 
+// 可以畫出來的最小區域邊長（cm）
+const MIN_ZONE_CM = 10;
+
 const LayerZones = {
   _drawing:  false,
   _startCm:  null,
@@ -8,6 +11,7 @@ const LayerZones = {
 
   // 拖曳區域的狀態
   _drag: null,  // { id, startMouseX, startMouseY, startZoneXcm, startZoneYcm, origXcm, origYcm, undoPushed }
+  _resize: null,
 
   // ── Render all zones ─────────────────────────────────────────
   render() {
@@ -70,7 +74,10 @@ const LayerZones = {
     areaLabel.textContent = `${areaPing} 坪`;
 
     g.appendChild(rect);
-    g.appendChild(label);
+    // 縮太小時文字會滿出區域外，依螢幕實際大小決定要不要放標籤
+    if (zone.widthCm * scale > 40 && zone.heightCm * scale > 18) {
+      g.appendChild(label);
+    }
     if (zone.widthCm * scale > 60 && zone.heightCm * scale > 40) {
       g.appendChild(areaLabel);
     }
@@ -82,6 +89,28 @@ const LayerZones = {
       dispatch('SET_SELECTION', { type: 'zone', id: zone.id });
       this._startDrag(e, zone);
     });
+
+    // 選取時才畫出縮放控制點
+    if (isSelected && AppState.mode === 'select') {
+      const hs = 4;   // 控制點半徑（px）
+      RESIZE_HANDLES.forEach(h => {
+        const hx = (zone.xCm + zone.widthCm  * (h.dx + 1) / 2) * scale;
+        const hy = (zone.yCm + zone.heightCm * (h.dy + 1) / 2) * scale;
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        dot.setAttribute('x', hx - hs);
+        dot.setAttribute('y', hy - hs);
+        dot.setAttribute('width',  hs * 2);
+        dot.setAttribute('height', hs * 2);
+        dot.setAttribute('class', 'zone-handle');
+        dot.style.cursor = `${h.pos}-resize`;
+        dot.addEventListener('mousedown', e => {
+          if (AppState.mode !== 'select') return;
+          e.stopPropagation();
+          this._startResize(e, zone, h);
+        });
+        g.appendChild(dot);
+      });
+    }
 
     svg.appendChild(g);
   },
@@ -102,7 +131,73 @@ const LayerZones = {
     document.getElementById('layer-zones').style.cursor = 'grabbing';
   },
 
+  // ── 拖拉縮放 ─────────────────────────────────────────────────
+  _startResize(e, zone, handle) {
+    this._resize = {
+      id: zone.id, handle,
+      startMouseX: e.clientX, startMouseY: e.clientY,
+      origX: zone.xCm, origY: zone.yCm,
+      origW: zone.widthCm, origH: zone.heightCm,
+      cur: { x: zone.xCm, y: zone.yCm, w: zone.widthCm, h: zone.heightCm }
+    };
+  },
+
+  _onResizeMove(e) {
+    const r = this._resize;
+    const zone = AppState.zones.find(z => z.id === r.id);
+    if (!zone) { this._resize = null; return; }
+
+    const step = e.altKey ? 1 : 5;
+    const dx = Grid.pxToCm(e.clientX - r.startMouseX);
+    const dy = Grid.pxToCm(e.clientY - r.startMouseY);
+
+    let x = r.origX, y = r.origY, w = r.origW, h = r.origH;
+
+    if (r.handle.dx < 0) {
+      const right = r.origX + r.origW;
+      x = Math.max(0, Math.min(right - MIN_ZONE_CM, Grid.snapCmFine(r.origX + dx, step)));
+      w = right - x;
+    } else if (r.handle.dx > 0) {
+      w = Math.max(MIN_ZONE_CM, Grid.snapCmFine(r.origW + dx, step));
+      w = Math.min(w, AppState.room.widthCm - x);
+    }
+
+    if (r.handle.dy < 0) {
+      const bottom = r.origY + r.origH;
+      y = Math.max(0, Math.min(bottom - MIN_ZONE_CM, Grid.snapCmFine(r.origY + dy, step)));
+      h = bottom - y;
+    } else if (r.handle.dy > 0) {
+      h = Math.max(MIN_ZONE_CM, Grid.snapCmFine(r.origH + dy, step));
+      h = Math.min(h, AppState.room.heightCm - y);
+    }
+
+    r.cur = { x, y, w, h };
+    zone.xCm = x; zone.yCm = y; zone.widthCm = w; zone.heightCm = h;
+    this.render();
+
+    document.getElementById('status-cursor').textContent =
+      `區域：${Math.round(w)} × ${Math.round(h)} cm（${(w * h / 33058).toFixed(2)} 坪）`;
+  },
+
+  _onResizeUp() {
+    const r = this._resize;
+    this._resize = null;
+
+    const zone = AppState.zones.find(z => z.id === r.id);
+    if (!zone) return;
+
+    // 先還原再套用，讓 undo 記到的是縮放前的狀態
+    zone.xCm = r.origX; zone.yCm = r.origY;
+    zone.widthCm = r.origW; zone.heightCm = r.origH;
+
+    this.applyManualUpdate(r.id, {
+      xCm: r.cur.x, yCm: r.cur.y,
+      widthCm: r.cur.w, heightCm: r.cur.h
+    });
+  },
+
   _onDragMove(e) {
+    if (this._resize) { this._onResizeMove(e); return; }
     if (!this._drag) return;
     const zone = AppState.zones.find(z => z.id === this._drag.id);
     if (!zone) { this._drag = null; return; }
@@ -148,6 +243,7 @@ const LayerZones = {
   },
 
   _onDragUp() {
+    if (this._resize) { this._onResizeUp(); return; }
     if (!this._drag) return;
     const zone = AppState.zones.find(z => z.id === this._drag.id);
     if (zone) Storage.saveFloorPlan();
@@ -186,6 +282,58 @@ const LayerZones = {
     return { ok: true };
   },
 
+  // ── 複製 / 貼上 ───────────────────────────────────────────────
+  // 取出可獨立存在的資料快照（來源刪掉後仍可貼上）
+  snapshot(id) {
+    const zone = AppState.zones.find(z => z.id === id);
+    if (!zone) return null;
+
+    return {
+      type:     zone.type,
+      widthCm:  zone.widthCm,
+      heightCm: zone.heightCm,
+      label:    zone.label || '',
+      opacity:  zone.opacity || 0.3,
+      xCm:      zone.xCm,
+      yCm:      zone.yCm
+    };
+  },
+
+  // 區域允許互相重疊，因此只做邊界夾限，不做碰撞閃避
+  pasteFrom(snap, atCm) {
+    if (!snap) return { ok: false, reason: 'empty' };
+
+    const def  = getZoneDef(snap.type);
+    if (!def) return { ok: false, reason: 'type-not-found' };
+
+    const maxX = Math.max(0, AppState.room.widthCm  - snap.widthCm);
+    const maxY = Math.max(0, AppState.room.heightCm - snap.heightCm);
+
+    let x = atCm ? atCm.x - snap.widthCm  / 2 : snap.xCm + DUPLICATE_OFFSET_CM;
+    let y = atCm ? atCm.y - snap.heightCm / 2 : snap.yCm + DUPLICATE_OFFSET_CM;
+    x = Math.max(0, Math.min(maxX, Grid.snapCmFine(x, 5)));
+    y = Math.max(0, Math.min(maxY, Grid.snapCmFine(y, 5)));
+
+    const zone = {
+      id:       generateId('z'),
+      type:     snap.type,
+      xCm:      x,
+      yCm:      y,
+      widthCm:  snap.widthCm,
+      heightCm: snap.heightCm,
+      label:    snap.label || def.label,
+      opacity:  snap.opacity
+    };
+
+    dispatch('ADD_ZONE', zone);
+    dispatch('SET_SELECTION', { type: 'zone', id: zone.id });
+    return { ok: true, id: zone.id };
+  },
+
+  duplicate(id, atCm) {
+    return this.pasteFrom(this.snapshot(id), atCm);
+  },
+
   // ── Drawing interaction ──────────────────────────────────────
   initDrawing() {
     const overlay = document.getElementById('interaction-overlay');
@@ -193,6 +341,11 @@ const LayerZones = {
     overlay.addEventListener('mousedown', this._onMouseDown.bind(this));
     overlay.addEventListener('mousemove', this._onMouseMove.bind(this));
     overlay.addEventListener('mouseup',   this._onMouseUp.bind(this));
+
+    // 測量模式共用同一個 overlay；各自用 AppState.mode 判斷要不要理會
+    overlay.addEventListener('mousedown', e => LayerMeasure.onMouseDown(e));
+    document.addEventListener('mousemove', e => LayerMeasure.onMouseMove(e));
+    document.addEventListener('mouseup',   e => LayerMeasure.onMouseUp(e));
 
     // Global handlers for zone drag (SVG elements, not overlay)
     document.addEventListener('mousemove', this._onDragMove.bind(this));
@@ -214,13 +367,13 @@ const LayerZones = {
   _onMouseDown(e) {
     if (AppState.mode !== 'draw-zone') return;
     this._drawing = true;
-    this._startCm = Grid.eventToCmSnapped(e);
+    this._startCm = Grid.eventToCmSnapped(e, Grid.stepForEvent(e));
     this._previewEl.style.display = '';
   },
 
   _onMouseMove(e) {
     if (!this._drawing || AppState.mode !== 'draw-zone') return;
-    const cur   = Grid.eventToCmSnapped(e);
+    const cur   = Grid.eventToCmSnapped(e, Grid.stepForEvent(e));
     const scale = AppState.view.scale;
     const x = Math.min(this._startCm.x, cur.x) * scale;
     const y = Math.min(this._startCm.y, cur.y) * scale;
@@ -236,13 +389,18 @@ const LayerZones = {
     if (!this._drawing || AppState.mode !== 'draw-zone') return;
     this._drawing = false;
     this._previewEl.style.display = 'none';
-    const cur  = Grid.eventToCmSnapped(e);
+    const cur  = Grid.eventToCmSnapped(e, Grid.stepForEvent(e));
     const minX = Math.min(this._startCm.x, cur.x);
     const minY = Math.min(this._startCm.y, cur.y);
     const w    = Math.abs(cur.x - this._startCm.x);
     const h    = Math.abs(cur.y - this._startCm.y);
-    const cell = AppState.view.gridCellCm;
-    if (w < cell || h < cell) return;
+
+    // 原本的下限是「一個網格格子」（預設 50cm），導致沿著牆邊拉的窄長條
+    // 會被無聲丟掉。改成固定的最小值，並在丟掉時給提示。
+    if (w < MIN_ZONE_CM || h < MIN_ZONE_CM) {
+      if (w > 0 || h > 0) toast(`區域太小（最小 ${MIN_ZONE_CM}cm），按住 Alt 可以 1cm 微調`);
+      return;
+    }
 
     const def  = getZoneDef(AppState.pendingZoneType || 'open-office');
     const zone = {

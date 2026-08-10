@@ -5,6 +5,10 @@
 const PING_SIDE_CM = Math.sqrt(33058); // ≈ 181.82
 
 // 可選的網格格子大小選項
+// 縮到很小時的可讀性門檻（px）
+const MIN_GRID_LINE_PX   = 4;   // 副格線低於此間距就不畫
+const MIN_RULER_LABEL_PX = 45;  // 尺標數字低於此間距就把級距加倍
+
 const GRID_CELL_OPTIONS = [
   { label: '25 cm',        cm: 25  },
   { label: '50 cm（預設）', cm: 50  },
@@ -44,12 +48,19 @@ const Grid = {
     };
   },
 
-  eventToCmSnapped(e) {
+  // stepCm 省略時用目前的網格格子大小；按住 Alt 傳 1 可做到 1cm 精準
+  eventToCmSnapped(e, stepCm) {
     const { x, y } = this.eventToCm(e);
+    const step = stepCm || AppState.view.gridCellCm;
     return {
-      x: Math.max(0, Math.min(AppState.room.widthCm,  this.snapCm(x))),
-      y: Math.max(0, Math.min(AppState.room.heightCm, this.snapCm(y)))
+      x: Math.max(0, Math.min(AppState.room.widthCm,  this.snapCm(x, step))),
+      y: Math.max(0, Math.min(AppState.room.heightCm, this.snapCm(y, step)))
     };
+  },
+
+  // 事件對應的 snap 粒度：Alt = 1cm，否則照網格
+  stepForEvent(e) {
+    return e && e.altKey ? 1 : AppState.view.gridCellCm;
   },
 
   // ── Canvas resize ────────────────────────────────────────────
@@ -78,7 +89,7 @@ const Grid = {
 
   // ── Set scale ────────────────────────────────────────────────
   setScale(newScale) {
-    AppState.view.scale = Math.max(1, Math.min(10, newScale));
+    AppState.view.scale = clampScale(newScale);
     this.resizeCanvas();
     this.drawGrid();
     LayerRoom.render();
@@ -116,10 +127,12 @@ const Grid = {
       this._drawPingGrid(ctx, W, H, scale);
     }
 
-    // Minor grid lines
-    ctx.strokeStyle = '#b8ccd8';   // 明顯深藍灰，肉眼可見
-    ctx.lineWidth   = 0.5;
-    this._drawGridLines(ctx, cellCm, scale, W, H);
+    // Minor grid lines（縮太小時線會糊成一片，直接略過）
+    if (cellCm * scale >= MIN_GRID_LINE_PX) {
+      ctx.strokeStyle = '#b8ccd8';   // 明顯深藍灰，肉眼可見
+      ctx.lineWidth   = 0.5;
+      this._drawGridLines(ctx, cellCm, scale, W, H);
+    }
 
     // Major grid lines (2× cell)
     ctx.strokeStyle = '#7898b0';   // 更深，區分主副格
@@ -131,8 +144,10 @@ const Grid = {
     ctx.lineWidth   = 2;
     ctx.strokeRect(1, 1, W - 2, H - 2);
 
-    // Ruler labels
-    this._drawRuler(ctx, majorCm, scale, W, H);
+    // Ruler labels（間距太窄時數字會疊在一起，自動放大級距）
+    let rulerCm = majorCm;
+    while (rulerCm * scale < MIN_RULER_LABEL_PX) rulerCm *= 2;
+    this._drawRuler(ctx, rulerCm, scale, W, H);
   },
 
   // ── 坪數格 overlay ────────────────────────────────────────────

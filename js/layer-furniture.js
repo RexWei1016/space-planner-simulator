@@ -70,8 +70,11 @@ function _findNearestFree(excludeId, targetX, targetY, rotation, widthCm, depthC
   return null;
 }
 
+const MIN_SIZE_CM = 10;
+
 const LayerFurniture = {
   _drag: null,
+  _resize: null,
   _ghost: null,
   _ghostRotation: 0,
 
@@ -109,6 +112,19 @@ const LayerFurniture = {
     sizeEl.className = 'fi-size-label';
     el.appendChild(sizeEl);
 
+    // 縮放控制點：只有選取時才由 CSS 顯示出來
+    RESIZE_HANDLES.forEach(h => {
+      const handle = document.createElement('div');
+      handle.className = `fi-handle fi-handle-${h.pos}`;
+      handle.dataset.pos = h.pos;
+      handle.addEventListener('mousedown', e => {
+        if (AppState.mode !== 'select') return;
+        e.stopPropagation();
+        this._startResize(e, inst, h);
+      });
+      el.appendChild(handle);
+    });
+
     el.addEventListener('mousedown', e => {
       if (AppState.mode !== 'select') return;
       e.stopPropagation();
@@ -125,21 +141,24 @@ const LayerFurniture = {
     const size = _getBaseSize(inst, def);
     const fp = _getFootprint(rot, size.widthCm, size.depthCm);
 
+    // 旋轉已由 _getFootprint 交換寬深表達（矩形轉 90° 等同於交換尺寸），
+    // 不可再套 CSS rotate，否則會轉兩次、跑到錨點左側並與碰撞框脫鉤。
     el.style.left = (inst.xCm * scale) + 'px';
     el.style.top = (inst.yCm * scale) + 'px';
     el.style.width = (fp.w * scale) + 'px';
     el.style.height = (fp.h * scale) + 'px';
     el.style.backgroundColor = def.color || '#a8d8ea';
-    el.style.transform = `rotate(${rot}deg)`;
-    el.style.transformOrigin = 'top left';
 
     el.classList.toggle('selected', AppState.selection.id === inst.id);
     el.classList.toggle('colliding', !!colliding);
+    // 太小的物件塞不下八個控制點，只留四個角
+    el.classList.toggle('tiny', fp.w * scale < 34 || fp.h * scale < 34);
 
     const nameEl = el.querySelector('.fi-label');
     const sizeEl = el.querySelector('.fi-size-label');
     nameEl.textContent = inst.label || def.name;
-    sizeEl.textContent = `${size.widthCm}×${size.depthCm}`;
+    sizeEl.textContent = rot ? `${size.widthCm}×${size.depthCm} ↻${rot}°`
+                             : `${size.widthCm}×${size.depthCm}`;
     sizeEl.style.display = (fp.w * scale > 50 && fp.h * scale > 32) ? '' : 'none';
   },
 
@@ -159,7 +178,106 @@ const LayerFurniture = {
     };
   },
 
+  // ── 拖拉縮放 ─────────────────────────────────────────────────
+  // 在「螢幕上看到的」footprint 空間裡計算，最後再依旋轉角換回寬/深。
+  _startResize(e, inst, handle) {
+    const def = getFurnitureDef(inst.defId);
+    if (!def) return;
+
+    dispatch('SET_SELECTION', { type: 'furniture', id: inst.id });
+
+    const rot  = inst.rotation || 0;
+    const size = _getBaseSize(inst, def);
+    const fp   = _getFootprint(rot, size.widthCm, size.depthCm);
+
+    this._resize = {
+      id: inst.id, def, handle, rot,
+      startMouseX: e.clientX, startMouseY: e.clientY,
+      origX: inst.xCm, origY: inst.yCm, origW: fp.w, origH: fp.h,
+      origWidthCm: size.widthCm, origDepthCm: size.depthCm,
+      cur: { x: inst.xCm, y: inst.yCm, w: fp.w, h: fp.h }
+    };
+  },
+
+  // footprint(寬,高) → 實例的 widthCm/depthCm（90/270 度時對調）
+  _footprintToSize(rot, w, h) {
+    return (rot === 90 || rot === 270)
+      ? { widthCm: h, depthCm: w }
+      : { widthCm: w, depthCm: h };
+  },
+
+  _onResizeMove(e) {
+    const r = this._resize;
+    const inst = AppState.furniture.find(f => f.id === r.id);
+    if (!inst) { this._resize = null; return; }
+
+    const step = e.altKey ? 1 : 5;
+    const dx = Grid.pxToCm(e.clientX - r.startMouseX);
+    const dy = Grid.pxToCm(e.clientY - r.startMouseY);
+
+    let x = r.origX, y = r.origY, w = r.origW, h = r.origH;
+
+    if (r.handle.dx < 0) {              // 拖左緣：右緣釘住
+      const right = r.origX + r.origW;
+      x = Math.max(0, Math.min(right - MIN_SIZE_CM, Grid.snapCmFine(r.origX + dx, step)));
+      w = right - x;
+    } else if (r.handle.dx > 0) {       // 拖右緣：左緣釘住
+      w = Math.max(MIN_SIZE_CM, Grid.snapCmFine(r.origW + dx, step));
+      w = Math.min(w, AppState.room.widthCm - x);
+    }
+
+    if (r.handle.dy < 0) {              // 拖上緣：下緣釘住
+      const bottom = r.origY + r.origH;
+      y = Math.max(0, Math.min(bottom - MIN_SIZE_CM, Grid.snapCmFine(r.origY + dy, step)));
+      h = bottom - y;
+    } else if (r.handle.dy > 0) {       // 拖下緣：上緣釘住
+      h = Math.max(MIN_SIZE_CM, Grid.snapCmFine(r.origH + dy, step));
+      h = Math.min(h, AppState.room.heightCm - y);
+    }
+
+    r.cur = { x, y, w, h };
+
+    const size = this._footprintToSize(r.rot, w, h);
+    inst.xCm = x; inst.yCm = y;
+    inst.widthCm = size.widthCm;
+    inst.depthCm = size.depthCm;
+
+    const colliding = _collidesWithOthers(r.id, x, y, r.rot, size.widthCm, size.depthCm);
+    const el = document.querySelector(`#layer-furniture [data-id="${r.id}"]`);
+    if (el) this._updateElement(el, inst, r.def, colliding);
+
+    document.getElementById('status-cursor').textContent =
+      `尺寸：${Math.round(size.widthCm)} × ${Math.round(size.depthCm)} cm`;
+  },
+
+  _onResizeUp() {
+    const r = this._resize;
+    this._resize = null;
+
+    const inst = AppState.furniture.find(f => f.id === r.id);
+    if (!inst) return;
+
+    const target = this._footprintToSize(r.rot, r.cur.w, r.cur.h);
+
+    // 先還原，再走 applyManualUpdate，讓碰撞處理與 undo 紀錄都走同一條路
+    inst.xCm = r.origX;
+    inst.yCm = r.origY;
+    inst.widthCm = r.origWidthCm;
+    inst.depthCm = r.origDepthCm;
+
+    const res = LayerFurniture.applyManualUpdate(r.id, {
+      xCm: r.cur.x, yCm: r.cur.y,
+      widthCm: target.widthCm, depthCm: target.depthCm
+    });
+
+    if (!res.ok) {
+      renderAll();
+      toast('這個尺寸會和其他物件重疊，已還原');
+    }
+  },
+
   _onMouseMove(e) {
+    if (this._resize && AppState.mode === 'select') { this._onResizeMove(e); return; }
     if (!this._drag || AppState.mode !== 'select') return;
 
     const d = this._drag;
@@ -198,6 +316,7 @@ const LayerFurniture = {
   },
 
   _onMouseUp() {
+    if (this._resize) { this._onResizeUp(); return; }
     if (!this._drag) return;
 
     const d = this._drag;
@@ -259,7 +378,7 @@ const LayerFurniture = {
     if (!def) return;
 
     const fp = _getFootprint(this._ghostRotation, def.widthCm, def.depthCm);
-    const snapped = Grid.eventToCmSnapped(e);
+    const snapped = Grid.eventToCmSnapped(e, Grid.stepForEvent(e));
     const xCm = Math.max(0, Math.min(AppState.room.widthCm - fp.w, snapped.x));
     const yCm = Math.max(0, Math.min(AppState.room.heightCm - fp.h, snapped.y));
 
@@ -291,13 +410,21 @@ const LayerFurniture = {
 
     const rot = this._ghostRotation;
     const fp = _getFootprint(rot, def.widthCm, def.depthCm);
-    const snapped = Grid.eventToCmSnapped(e);
-    const xCm = Math.max(0, Math.min(AppState.room.widthCm - fp.w, snapped.x));
-    const yCm = Math.max(0, Math.min(AppState.room.heightCm - fp.h, snapped.y));
+    const snapped = Grid.eventToCmSnapped(e, Grid.stepForEvent(e));
+    let xCm = Math.max(0, Math.min(AppState.room.widthCm - fp.w, snapped.x));
+    let yCm = Math.max(0, Math.min(AppState.room.heightCm - fp.h, snapped.y));
 
+    // 靠牆時 x/y 會被夾到同一個位置，若原地被佔住就整個放不下去。
+    // 改成跟拖曳一樣先找附近空位，真的塞不下才拒絕。
     if (_collidesWithOthers(null, xCm, yCm, rot, def.widthCm, def.depthCm)) {
-      this._flashGhostError();
-      return;
+      const free = _findNearestFree(null, xCm, yCm, rot, def.widthCm, def.depthCm);
+      if (!free) {
+        this._flashGhostError();
+        toast('這附近放不下，請先挪開其他物件');
+        return;
+      }
+      xCm = free.x;
+      yCm = free.y;
     }
 
     const inst = {
@@ -368,6 +495,69 @@ const LayerFurniture = {
     UIProperties.refresh();
 
     return { ok: true };
+  },
+
+  // ── 複製 / 貼上 ─────────────────────────────────────────────
+  // 取出可獨立存在的資料快照（來源刪掉後仍可貼上）
+  snapshot(id) {
+    const inst = AppState.furniture.find(f => f.id === id);
+    if (!inst) return null;
+
+    const def = getFurnitureDef(inst.defId);
+    if (!def) return null;
+
+    const size = _getBaseSize(inst, def);
+    return {
+      defId:    inst.defId,
+      widthCm:  size.widthCm,
+      depthCm:  size.depthCm,
+      rotation: inst.rotation || 0,
+      label:    inst.label || '',
+      xCm:      inst.xCm,
+      yCm:      inst.yCm
+    };
+  },
+
+  // atCm 給定時以該點為中心貼上，否則從來源位置斜移一段距離
+  pasteFrom(snap, atCm) {
+    if (!snap) return { ok: false, reason: 'empty' };
+    if (!getFurnitureDef(snap.defId)) return { ok: false, reason: 'def-not-found' };
+
+    const rot  = snap.rotation || 0;
+    const fp   = _getFootprint(rot, snap.widthCm, snap.depthCm);
+    const maxX = Math.max(0, AppState.room.widthCm  - fp.w);
+    const maxY = Math.max(0, AppState.room.heightCm - fp.h);
+
+    let x = atCm ? atCm.x - fp.w / 2 : snap.xCm + DUPLICATE_OFFSET_CM;
+    let y = atCm ? atCm.y - fp.h / 2 : snap.yCm + DUPLICATE_OFFSET_CM;
+    x = Math.max(0, Math.min(maxX, Grid.snapCmFine(x, 5)));
+    y = Math.max(0, Math.min(maxY, Grid.snapCmFine(y, 5)));
+
+    if (_collidesWithOthers(null, x, y, rot, snap.widthCm, snap.depthCm)) {
+      const free = _findNearestFree(null, x, y, rot, snap.widthCm, snap.depthCm);
+      if (!free) return { ok: false, reason: 'collision' };
+      x = free.x;
+      y = free.y;
+    }
+
+    const inst = {
+      id:       generateId('fi'),
+      defId:    snap.defId,
+      xCm:      x,
+      yCm:      y,
+      widthCm:  snap.widthCm,
+      depthCm:  snap.depthCm,
+      rotation: rot,
+      label:    snap.label || ''
+    };
+
+    dispatch('ADD_FURNITURE', inst);
+    dispatch('SET_SELECTION', { type: 'furniture', id: inst.id });
+    return { ok: true, id: inst.id };
+  },
+
+  duplicate(id, atCm) {
+    return this.pasteFrom(this.snapshot(id), atCm);
   },
 
   _flashGhostError() {

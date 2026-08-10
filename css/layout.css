@@ -156,3 +156,30 @@
 }
 
 #status-bar span { white-space: nowrap; }
+
+/* ── Toast 提示 ───────────────────────────────────────── */
+#app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--status-h) + 24px);
+  transform: translate(-50%, 12px);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(24, 40, 54, .92);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .18s ease, transform .18s ease, visibility .18s;
+  z-index: 9999;
+}
+
+#app-toast.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}

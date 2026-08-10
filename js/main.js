@@ -7,6 +7,7 @@ function renderAll() {
   LayerRoom.render();
   LayerZones.render();
   LayerFurniture.render();
+  LayerMeasure.render();
   _updateRoomInfoBar();
   _updateStatusBar();
 }
@@ -23,8 +24,83 @@ function _updateStatusBar() {
     `家具 ${AppState.furniture.length} / 區域 ${AppState.zones.length}`;
 }
 
+// ── Toast 提示 ───────────────────────────────────────────────────
+let _toastTimer = null;
+
+function toast(msg) {
+  let el = document.getElementById('app-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'app-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+// ── 複製 / 貼上 ──────────────────────────────────────────────────
+let _clipboard     = null;  // { kind: 'furniture' | 'zone', data: snapshot }
+let _lastCursorCm  = null;  // 最後一次落在畫布上的游標位置（cm）
+
+function copySelection() {
+  const { type, id } = AppState.selection;
+
+  if (type === 'furniture') {
+    const snap = LayerFurniture.snapshot(id);
+    if (!snap) return;
+    _clipboard = { kind: 'furniture', data: snap };
+    toast('已複製物件，Ctrl+V 貼到游標位置');
+    return;
+  }
+
+  if (type === 'zone') {
+    const snap = LayerZones.snapshot(id);
+    if (!snap) return;
+    _clipboard = { kind: 'zone', data: snap };
+    toast('已複製區域，Ctrl+V 貼到游標位置');
+    return;
+  }
+
+  toast('請先選取要複製的物件或區域');
+}
+
+function pasteClipboard() {
+  if (!_clipboard) { toast('剪貼簿是空的'); return; }
+
+  const res = _clipboard.kind === 'furniture'
+    ? LayerFurniture.pasteFrom(_clipboard.data, _lastCursorCm)
+    : LayerZones.pasteFrom(_clipboard.data, _lastCursorCm);
+
+  toast(res.ok ? '已貼上' : '此處放不下，找不到可用位置');
+}
+
+function duplicateSelection() {
+  const { type, id } = AppState.selection;
+
+  if (type === 'furniture') {
+    const res = LayerFurniture.duplicate(id);
+    toast(res.ok ? '已複製物件' : '找不到可放置的位置');
+    return;
+  }
+
+  if (type === 'zone') {
+    const res = LayerZones.duplicate(id);
+    toast(res.ok ? '已複製區域' : '無法複製此區域');
+    return;
+  }
+
+  toast('請先選取要複製的物件或區域');
+}
+
 // ── App Init ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+
+  // 0. 顯示目前載入的版本，方便確認有沒有吃到新的檔案（而不是舊快取）
+  const ver = document.querySelector('meta[name="app-version"]')?.content || '—';
+  const verEl = document.getElementById('status-version');
+  if (verEl) verEl.textContent = `v${ver}`;
 
   // 1. Init catalog (built-ins + custom from localStorage)
   FurnitureCatalog.init();
@@ -81,9 +157,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-new-plan').addEventListener('click', () => {
     if (confirm('確定要重新開始？目前的規畫將被清除。')) {
-      AppState.zones     = [];
-      AppState.furniture = [];
-      AppState.selection = { type: null, id: null };
+      AppState.zones        = [];
+      AppState.furniture    = [];
+      AppState.measurements = [];
+      AppState.selection    = { type: null, id: null };
       AppState.undoStack = [];
       AppState.redoStack = [];
       UIDialogs.openSetupModal(true);
@@ -124,6 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
   viewport.addEventListener('mousemove', e => {
     if (!AppState.room.widthCm) return;
     const { x, y } = Grid.eventToCm(e);
+    _lastCursorCm = { x, y };   // 供 Ctrl+V 貼到游標位置
     document.getElementById('status-cursor').textContent =
       `游標：(${Math.round(x)}, ${Math.round(y)}) cm`;
   });
@@ -135,6 +213,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
     if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); redo(); }
+
+    if (e.ctrlKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicateSelection(); }
+    if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); copySelection(); }
+    if (e.ctrlKey && (e.key === 'v' || e.key === 'V')) { e.preventDefault(); pasteClipboard(); }
 
     if (e.key === 'Escape') {
       setMode('select');
