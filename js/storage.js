@@ -163,11 +163,35 @@ const Storage = {
 };
 
 // ── Helpers ──────────────────────────────────────────────────────
+// SVG 被當成圖片載入時是一份獨立文件，讀不到頁面的樣式表，
+// 所有靠 class 上色的元素都會退回預設值（fill 變黑、stroke 消失）。
+// 因此序列化前要把樣式內嵌進去。
+function _collectCssText() {
+  let css = '';
+  for (const sheet of document.styleSheets) {
+    try {
+      for (const rule of sheet.cssRules) css += rule.cssText + '\n';
+    } catch {
+      // 跨來源樣式表讀不到 cssRules，略過
+    }
+  }
+  return css;
+}
+
 function _svgToImage(svgEl, w, h) {
   return new Promise((resolve, reject) => {
     const clone = svgEl.cloneNode(true);
     clone.setAttribute('width',  w);
     clone.setAttribute('height', h);
+    clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    // 移掉 id，否則 #layer-room 之類的 width:100% 規則會蓋掉上面的尺寸
+    clone.removeAttribute('id');
+
+    const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    style.textContent = _collectCssText();
+    clone.insertBefore(style, clone.firstChild);
+
     const svgData = new XMLSerializer().serializeToString(clone);
     const blob    = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url     = URL.createObjectURL(blob);
@@ -186,19 +210,20 @@ async function _drawSVGToCanvas(ctx, svgEl, w, h) {
 }
 
 function _drawFurnitureOnCanvas(ctx, inst, def, scale) {
-  const x = inst.xCm * scale;
-  const y = inst.yCm * scale;
-  const w = def.widthCm * scale;
-  const d = def.depthCm * scale;
-  const rot = (inst.rotation || 0) * Math.PI / 180;
+  // 尺寸要用實例上的（可能被拖拉控制點改過），不能只看型錄。
+  // 旋轉沿用畫面上的做法：交換寬深即可，不可再 ctx.rotate()，
+  // 否則會轉兩次、跑到自己的 footprint 外面。
+  const widthCm = inst.widthCm || def.widthCm;
+  const depthCm = inst.depthCm || def.depthCm;
+  const swap    = (inst.rotation === 90 || inst.rotation === 270);
+
+  const x  = inst.xCm * scale;
+  const y  = inst.yCm * scale;
+  const rw = (swap ? depthCm : widthCm) * scale;
+  const rh = (swap ? widthCm : depthCm) * scale;
 
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(rot);
-
-  // Adjust for rotation so item stays in place
-  let rw = w, rh = d;
-  if (inst.rotation === 90 || inst.rotation === 270) { rw = d; rh = w; }
 
   ctx.fillStyle = def.color || '#a8d8ea';
   ctx.globalAlpha = 0.85;
